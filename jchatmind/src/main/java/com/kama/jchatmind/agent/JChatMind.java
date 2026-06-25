@@ -218,14 +218,23 @@ public class JChatMind {
 
     // thinkPrompt 应该放到 system 中还是
     private boolean think() {
-        String thinkPrompt = """
-                现在你是一个智能的的具体「决策模块」
-                请根据当前对话上下文，决定下一步的动作。
-                                \s
-                【额外信息】
-                - 你目前拥有的知识库列表以及描述：%s
-                - 如果有缺失的上下文时，优先从知识库中进行搜索
-                """.formatted(this.availableKbs);
+        // 构建决策提示词，根据是否有可用的知识库来调整
+        String thinkPrompt;
+        if (this.availableKbs != null && !this.availableKbs.isEmpty()) {
+            thinkPrompt = """
+                    现在你是一个智能的具体「决策模块」
+                    请根据当前对话上下文，决定下一步的动作。
+
+                    【额外信息】
+                    - 你目前拥有的知识库列表以及描述：%s
+                    - 如果有缺失的上下文时，优先从知识库中进行搜索
+                    """.formatted(this.availableKbs);
+        } else {
+            thinkPrompt = """
+                    现在你是一个智能的具体「决策模块」
+                    请根据当前对话上下文，决定下一步的动作。
+                    """;
+        }
 
         // 将 thinkPrompt 通过 .user(thinkPrompt) 的方式构造进入 chatClient 中
         // 既能让每次 messageList 的最后一条是 本条提示词，
@@ -235,6 +244,7 @@ public class JChatMind {
                 .messages(this.chatMemory.get(this.chatSessionId))
                 .build();
 
+        // 直接获取完整响应，避免流式分片导致最后保存的内容为空。
         this.lastChatResponse = this.chatClient
                 .prompt(prompt)
                 .system(thinkPrompt)
@@ -243,7 +253,7 @@ public class JChatMind {
                 .chatClientResponse()
                 .chatResponse();
 
-        Assert.notNull(lastChatResponse, "Last chat client response cannot be null");
+        Assert.notNull(this.lastChatResponse, "Last chat client response cannot be null");
 
         AssistantMessage output = this.lastChatResponse
                 .getResult()
@@ -261,6 +271,7 @@ public class JChatMind {
         // 如果工具调用不为空，则进入执行阶段
         return !toolCalls.isEmpty();
     }
+
 
     // 执行
     private void execute() {

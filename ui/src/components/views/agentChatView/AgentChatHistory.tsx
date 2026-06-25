@@ -12,18 +12,19 @@ import type { ChatMessageVO, SseMessageType, ToolCall, ToolResponse } from "../.
 
 interface AgentChatHistoryProps {
   messages: ChatMessageVO[];
+  streamingContent?: string;
+  isStreaming?: boolean;
   displayAgentStatus?: boolean;
   agentStatusText?: string;
   agentStatusType?: SseMessageType;
 }
 
-// 工具调用展示组件（简化版，用于 assistant 消息内）
 const ToolCallDisplay: React.FC<{ toolCall: ToolCall }> = ({ toolCall }) => {
   let parsedArgs: Record<string, unknown> = {};
   try {
     parsedArgs = JSON.parse(toolCall.arguments) as Record<string, unknown>;
   } catch {
-    // 如果解析失败，使用原始字符串
+    // ignore parse errors
   }
 
   const argCount = Object.keys(parsedArgs).length;
@@ -32,20 +33,19 @@ const ToolCallDisplay: React.FC<{ toolCall: ToolCall }> = ({ toolCall }) => {
     : toolCall.arguments.slice(0, 50) + (toolCall.arguments.length > 50 ? "..." : "");
 
   return (
-    <div className="text-xs text-gray-500 flex items-center gap-1.5">
-      <ToolOutlined className="text-blue-500" />
-      <span className="font-mono text-blue-600">{toolCall.name}</span>
+    <div className="text-xs text-zinc-500 flex items-center gap-1.5">
+      <ToolOutlined className="text-indigo-400" />
+      <span className="font-mono text-indigo-500">{toolCall.name}</span>
       {argPreview && (
         <>
-          <span className="text-gray-400">·</span>
-          <span className="text-gray-500 truncate max-w-[200px]">{argPreview}</span>
+          <span className="text-zinc-300">·</span>
+          <span className="text-zinc-400 truncate max-w-[200px]">{argPreview}</span>
         </>
       )}
     </div>
   );
 };
 
-// 工具响应展示组件（可折叠）
 const ToolResponseDisplay: React.FC<{ toolResponse: ToolResponse }> = ({
   toolResponse,
 }) => {
@@ -69,22 +69,22 @@ const ToolResponseDisplay: React.FC<{ toolResponse: ToolResponse }> = ({
   return (
     <div className="my-1.5 text-xs">
       <div 
-        className="flex items-center gap-2 text-gray-500 cursor-pointer hover:text-gray-700 transition-colors"
+        className="flex items-center gap-2 text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
-          <DownOutlined className="text-gray-400" />
+          <DownOutlined className="text-zinc-400" />
         ) : (
-          <RightOutlined className="text-gray-400" />
+          <RightOutlined className="text-zinc-400" />
         )}
-        <CheckCircleOutlined className="text-green-500" />
-        <span className="font-mono text-green-600">{toolResponse.name}</span>
-        <span className="text-gray-400">·</span>
-        <span className="text-gray-500 truncate flex-1">{dataPreview}</span>
+        <CheckCircleOutlined className="text-emerald-500" />
+        <span className="font-mono text-emerald-600">{toolResponse.name}</span>
+        <span className="text-zinc-300">·</span>
+        <span className="text-zinc-400 truncate flex-1">{dataPreview}</span>
       </div>
       {expanded && (
-        <div className="ml-5 mt-1.5 p-2 bg-gray-50 rounded border border-gray-200">
-          <div className="text-xs text-gray-600 font-mono">
+        <div className="ml-5 mt-1.5 p-2 bg-zinc-50 rounded border border-zinc-200">
+          <div className="text-xs text-zinc-600 font-mono">
             {isJson ? (
               <pre className="whitespace-pre-wrap break-words overflow-x-auto max-h-60 overflow-y-auto">
                 {JSON.stringify(parsedData, null, 2)}
@@ -101,37 +101,48 @@ const ToolResponseDisplay: React.FC<{ toolResponse: ToolResponse }> = ({
   );
 };
 
+/** 跳动三点指示器 */
+const BouncingDots: React.FC = () => {
+  return (
+    <span className="inline-flex items-center gap-[3px]">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="w-[5px] h-[5px] rounded-full bg-zinc-400 animate-bounce"
+          style={{
+            animation: `bounce 1.2s ease-in-out infinite`,
+            animationDelay: `${i * 0.2}s`,
+          }}
+        />
+      ))}
+    </span>
+  );
+};
+
 const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
   messages,
+  streamingContent = "",
+  isStreaming = false,
   displayAgentStatus = false,
   agentStatusText = "",
   agentStatusType,
 }) => {
-  // 滚动容器引用
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  // 是否允许自动滚动（用户是否接近底部）
   const [isNearBottom, setIsNearBottom] = useState(true);
-  // 容错阈值（像素）
   const SCROLL_THRESHOLD = 20;
-  // 上一次消息数量，用于检测新消息
   const prevMessagesLengthRef = useRef(messages.length);
 
-  // 检查是否接近底部
   const checkIfNearBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return false;
-
     const { scrollTop, clientHeight, scrollHeight } = container;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     return distanceFromBottom <= SCROLL_THRESHOLD;
   }, []);
 
-  // 滚动到底部
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-
-    // 使用 requestAnimationFrame 确保 DOM 更新完成后再滚动
     requestAnimationFrame(() => {
       if (container) {
         container.scrollTop = container.scrollHeight;
@@ -139,49 +150,46 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
     });
   }, []);
 
-  // 处理滚动事件，实时更新是否接近底部的状态
   const handleScroll = useCallback(() => {
     const nearBottom = checkIfNearBottom();
     setIsNearBottom(nearBottom);
   }, [checkIfNearBottom]);
 
-  // 监听滚动事件
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-
-    // 初始化时检查是否在底部（延迟执行以避免同步 setState）
     const initTimer = setTimeout(() => {
       setIsNearBottom(checkIfNearBottom());
     }, 0);
-
     container.addEventListener("scroll", handleScroll, { passive: true });
-
     return () => {
       clearTimeout(initTimer);
       container.removeEventListener("scroll", handleScroll);
     };
   }, [handleScroll, checkIfNearBottom]);
 
-  // 监听消息变化，决定是否自动滚动
+  // 监听消息长度变化→自动滚动
   useEffect(() => {
     const hasNewMessage = messages.length > prevMessagesLengthRef.current;
     prevMessagesLengthRef.current = messages.length;
-
-    // 如果有新消息且用户接近底部，则自动滚动
     if (hasNewMessage && isNearBottom) {
       scrollToBottom();
     }
   }, [messages, isNearBottom, scrollToBottom]);
 
-  // 当 displayAgentStatus 变化时，如果用户接近底部，也自动滚动
+  // 流式内容变化→自动滚动
+  useEffect(() => {
+    if (isStreaming && isNearBottom) {
+      scrollToBottom();
+    }
+  }, [streamingContent, isStreaming, isNearBottom, scrollToBottom]);
+
   useEffect(() => {
     if (displayAgentStatus && isNearBottom) {
       scrollToBottom();
     }
   }, [displayAgentStatus, isNearBottom, scrollToBottom]);
 
-  // 获取状态标签
   const getStatusLabel = () => {
     switch (agentStatusType) {
       case "AI_PLANNING":
@@ -198,17 +206,15 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
   return (
     <div 
       ref={scrollContainerRef}
-      className="flex-1 px-16 pt-4 overflow-y-scroll"
+      className="flex-1 px-8 pt-4 overflow-y-scroll"
     >
       {messages.map((message) => {
         return (
           <div className="mb-4" key={message.id}>
-            {/* Assistant 消息 */}
             {message.role === "assistant" && (
               <Bubble
                 content={
                   <div className="w-full">
-                    {/* 工具调用展示 */}
                     {message.metadata?.toolCalls &&
                       message.metadata.toolCalls.length > 0 && (
                         <div className="mb-2 flex flex-wrap gap-2">
@@ -217,7 +223,6 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
                           ))}
                         </div>
                       )}
-                    {/* 消息内容 */}
                     {message.content && (
                       <div>
                         <XMarkdown
@@ -233,7 +238,6 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
               />
             )}
 
-            {/* Tool 消息 - 简洁展示，不使用气泡 */}
             {message.role === "tool" && message.metadata?.toolResponse && (
               <div className="flex justify-start">
                 <div className="max-w-[85%]">
@@ -242,15 +246,13 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
               </div>
             )}
 
-            {/* User 消息 */}
             {message.role === "user" && (
               <Bubble content={message.content} placement="end" />
             )}
 
-            {/* System 消息 */}
             {message.role === "system" && (
               <div className="flex justify-center">
-                <div className="px-3 py-1 bg-gray-100 text-gray-600 text-xs rounded-full flex items-center gap-1">
+                <div className="px-3 py-1 bg-zinc-100 text-zinc-500 text-xs rounded-full flex items-center gap-1">
                   <RobotOutlined />
                   <span>{message.content}</span>
                 </div>
@@ -259,37 +261,44 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
           </div>
         );
       })}
-      {displayAgentStatus && (
-        <div className="mb-3">
-          <div
-            className="animate-pulse"
-            style={{
-              animation: "pulse 0.8s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-              filter: "brightness(1.15)",
-            }}
-          >
-            <Bubble
-              content={
-                <span className="flex items-center gap-2">
-                  <span
-                    className="font-semibold text-blue-600"
-                    style={{
-                      animation:
-                        "pulse 0.7s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-                      textShadow:
-                        "0 0 10px rgba(37, 99, 235, 1), 0 0 20px rgba(37, 99, 235, 0.8), 0 0 30px rgba(37, 99, 235, 0.5)",
-                      filter: "brightness(1.3)",
-                    }}
-                  >
-                    ✨ {getStatusLabel()}
-                  </span>
-                  <span className="text-gray-400">·</span>
-                  <span className="text-gray-600">{agentStatusText}</span>
+
+      {/* 流式输出区域 */}
+      {isStreaming && (
+        <div className="mb-4">
+          <Bubble
+            content={
+              streamingContent ? (
+                <XMarkdown streaming={{ enableAnimation: false, hasNextChunk: true }}>
+                  {streamingContent}
+                </XMarkdown>
+              ) : (
+                <span className="flex items-center gap-2 text-zinc-500 text-sm">
+                  思考中
+                  <BouncingDots />
                 </span>
-              }
-              placement="start"
-            />
-          </div>
+              )
+            }
+            placement="start"
+          />
+        </div>
+      )}
+
+      {/* Agent 状态（规划中/思考中/执行中）—— 仅在没有流式内容时显示 */}
+      {displayAgentStatus && !isStreaming && (
+        <div className="mb-3 animate-pulse">
+          <Bubble
+            content={
+              <span className="flex items-center gap-2">
+                <span className="font-medium text-indigo-500 text-sm">
+                  {getStatusLabel()}
+                </span>
+                <span className="text-zinc-300">·</span>
+                <span className="text-zinc-500 text-sm">{agentStatusText}</span>
+                <BouncingDots />
+              </span>
+            }
+            placement="start"
+          />
         </div>
       )}
     </div>

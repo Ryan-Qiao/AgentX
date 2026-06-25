@@ -1,11 +1,6 @@
 import React, { useState, useMemo } from "react";
-import { Card, Space, Typography, Select } from "antd";
-import {
-  BulbOutlined,
-  MessageOutlined,
-  RobotOutlined,
-  DownOutlined,
-} from "@ant-design/icons";
+import { Select } from "antd";
+import { DownOutlined } from "@ant-design/icons";
 import { Sender } from "@ant-design/x";
 import { useNavigate } from "react-router-dom";
 import {
@@ -16,13 +11,18 @@ import {
 import { getAgentEmoji } from "../../../utils";
 import { useChatSessions } from "../../../hooks/useChatSessions.ts";
 
-const { Title, Text } = Typography;
-
 interface DefaultAgentChatViewProps {
   handleSendMessage: (message: string) => void;
   loading: boolean;
   agents: AgentVO[];
 }
+
+const SUGGESTIONS = [
+  "帮我检查一下这段代码的性能问题",
+  "解释一下什么是 RAG 技术",
+  "帮我写一篇博客提纲",
+  "分析这份文档的重点内容",
+];
 
 const EmptyAgentChatView: React.FC<DefaultAgentChatViewProps> = ({
   loading,
@@ -34,7 +34,6 @@ const EmptyAgentChatView: React.FC<DefaultAgentChatViewProps> = ({
   const navigate = useNavigate();
   const { refreshChatSessions } = useChatSessions();
 
-  // 为每个 agent 生成 emoji
   const agentsWithEmoji = useMemo(() => {
     return agents.map((agent) => ({
       ...agent,
@@ -42,145 +41,115 @@ const EmptyAgentChatView: React.FC<DefaultAgentChatViewProps> = ({
     }));
   }, [agents]);
 
-  // 计算实际选中的 agent ID（如果用户没有选择，则使用默认的第一个）
   const effectiveAgentId = useMemo(() => {
-    if (selectedAgentId) {
-      return selectedAgentId;
-    }
+    if (selectedAgentId) return selectedAgentId;
     return agents.length > 0 ? agents[0].id : null;
   }, [selectedAgentId, agents]);
 
+  const currentAgent = useMemo(() => {
+    return agentsWithEmoji.find((a) => a.id === effectiveAgentId);
+  }, [effectiveAgentId, agentsWithEmoji]);
+
   return (
     <div className="flex flex-col h-full">
-      {/* Agent 选择器 - 顶部 */}
+      {/* Agent 选择器 */}
       {agents.length > 0 && (
-        <div className="border-b border-gray-200 bg-white px-4 py-3">
-          <div className="flex items-center justify-start">
-            <Select
-              value={effectiveAgentId}
-              onChange={(value) => setSelectedAgentId(value)}
-              style={{ width: 200 }}
-              className="agent-selector"
-              suffixIcon={<DownOutlined className="text-gray-400" />}
-              placeholder="选择智能体助手"
-              optionRender={(option) => (
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">
-                    {agentsWithEmoji.find((a) => a.id === option.value)?.emoji}
-                  </span>
-                  <span className="text-sm">{option.label}</span>
-                </div>
-              )}
-              options={agentsWithEmoji.map((agent) => ({
-                value: agent.id,
-                label: agent.name,
-              }))}
-            />
-          </div>
-        </div>
-      )}
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="max-w-2xl w-full space-y-6">
-          <div className="text-center mb-8">
-            <Title level={2} className="mb-2">
-              开始新的对话
-            </Title>
-            <Text type="secondary" className="text-base">
-              选择一个智能体助手开始聊天，或直接发送消息创建新会话
-            </Text>
-          </div>
-          <Space orientation="vertical" size="large" className="w-full">
-            <Card
-              hoverable
-              className="cursor-pointer transition-all hover:shadow-lg"
-            >
-              <Space size="middle">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-400 flex items-center justify-center">
-                  <RobotOutlined className="text-white text-xl" />
-                </div>
-                <div>
-                  <Title level={5} className="mb-1">
-                    智能对话
-                  </Title>
-                  <Text type="secondary">
-                    与 AI 助手进行智能对话，获取帮助和建议
-                  </Text>
-                </div>
-              </Space>
-            </Card>
-
-            <Card
-              hoverable
-              className="cursor-pointer transition-all hover:shadow-lg"
-            >
-              <Space size="middle">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-400 to-teal-400 flex items-center justify-center">
-                  <BulbOutlined className="text-white text-xl" />
-                </div>
-                <div>
-                  <Title level={5} className="mb-1">
-                    知识问答
-                  </Title>
-                  <Text type="secondary">
-                    基于知识库进行问答，获取准确的信息
-                  </Text>
-                </div>
-              </Space>
-            </Card>
-
-            <Card
-              hoverable
-              className="cursor-pointer transition-all hover:shadow-lg"
-            >
-              <Space size="middle">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-red-400 flex items-center justify-center">
-                  <MessageOutlined className="text-white text-xl" />
-                </div>
-                <div>
-                  <Title level={5} className="mb-1">
-                    快速开始
-                  </Title>
-                  <Text type="secondary">
-                    在下方输入框输入消息，立即开始对话
-                  </Text>
-                </div>
-              </Space>
-            </Card>
-          </Space>
-        </div>
-      </div>
-      <div className="border-t border-gray-200 bg-white">
-        {/* 输入框 */}
-        <div className="px-4 pb-4 pt-4">
-          <Sender
-            onSubmit={async () => {
-              if (!effectiveAgentId) return;
-              console.log("发送消息", message);
-              const response = await createChatSession({
-                agentId: effectiveAgentId,
-                title: message.slice(0, 20),
-              });
-              await createChatMessage({
-                sessionId: response.chatSessionId ?? "",
-                content: message,
-                role: "user",
-                agentId: effectiveAgentId,
-              });
-              // 刷新聊天会话列表
-              await refreshChatSessions();
-              setMessage("");
-              navigate(
-                `/chat/${response.chatSessionId}`,
-              );
-            }}
-            value={message}
-            loading={loading}
-            placeholder="输入消息开始对话..."
-            onChange={(value) => {
-              setMessage(value);
-            }}
+        <div className="border-b border-zinc-100 bg-white px-4 py-2.5">
+          <Select
+            value={effectiveAgentId}
+            onChange={(value) => setSelectedAgentId(value)}
+            style={{ width: 240 }}
+            variant="borderless"
+            suffixIcon={<DownOutlined className="text-zinc-400 text-xs" />}
+            placeholder="选择智能体助手"
+            optionRender={(option) => (
+              <div className="flex items-center gap-2">
+                <span className="text-base">
+                  {agentsWithEmoji.find((a) => a.id === option.value)?.emoji}
+                </span>
+                <span className="text-sm">{option.label}</span>
+              </div>
+            )}
+            options={agentsWithEmoji.map((agent) => ({
+              value: agent.id,
+              label: agent.name,
+            }))}
           />
         </div>
+      )}
+
+      {/* 欢迎区域 */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6">
+        <div className="max-w-xl w-full text-center">
+          {currentAgent ? (
+            <>
+              <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center mx-auto mb-4 text-2xl">
+                {currentAgent.emoji}
+              </div>
+              <h1 className="text-xl font-semibold text-zinc-900 mb-1.5">
+                {currentAgent.name}
+              </h1>
+              {currentAgent.description && (
+                <p className="text-sm text-zinc-500 mb-6 max-w-md mx-auto leading-relaxed">
+                  {currentAgent.description}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="w-14 h-14 rounded-2xl bg-zinc-100 flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl">💬</span>
+              </div>
+              <h1 className="text-xl font-semibold text-zinc-900 mb-1.5">
+                开始新的对话
+              </h1>
+              <p className="text-sm text-zinc-500 mb-6 max-w-md mx-auto">
+                选择一个智能体助手开始聊天，或直接发送消息创建新会话
+              </p>
+            </>
+          )}
+
+          {/* 快捷建议 */}
+          <div className="flex flex-wrap justify-center gap-2">
+            {SUGGESTIONS.map((suggestion) => (
+              <button
+                key={suggestion}
+                onClick={() => setMessage(suggestion)}
+                className="px-3.5 py-1.5 text-sm text-zinc-500 bg-zinc-50 hover:bg-zinc-100 hover:text-zinc-700 rounded-full border border-zinc-200 transition-colors cursor-pointer"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 输入框 */}
+      <div className="border-t border-zinc-100 bg-white px-4 pb-4 pt-3">
+        <Sender
+          onSubmit={async () => {
+            if (!effectiveAgentId || !message.trim()) return;
+            const response = await createChatSession({
+              agentId: effectiveAgentId,
+              title: message.slice(0, 20),
+            });
+            await createChatMessage({
+              sessionId: response.chatSessionId ?? "",
+              content: message,
+              role: "user",
+              agentId: effectiveAgentId,
+            });
+            await refreshChatSessions();
+            setMessage("");
+            navigate(`/chat/${response.chatSessionId}`);
+          }}
+          value={message}
+          loading={loading}
+          placeholder="输入消息开始对话..."
+          onChange={(value) => {
+            setMessage(value);
+          }}
+        />
       </div>
     </div>
   );

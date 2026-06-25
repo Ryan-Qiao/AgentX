@@ -34,6 +34,7 @@ export interface ChatMessageVO {
 
 export type SseMessageType =
   | "AI_GENERATED_CONTENT"
+  | "AI_STREAMING_CONTENT"
   | "AI_PLANNING"
   | "AI_THINKING"
   | "AI_EXECUTING"

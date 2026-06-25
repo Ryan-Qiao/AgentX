@@ -27,9 +27,6 @@ const SideMenu: React.FC<SideMenuProps> = () => {
     import("../api/api.ts").AgentVO | null
   >(null);
 
-  /**
-   * 添加知识库模态框状态
-   */
   const [isAddKnowledgeBaseModalOpen, setIsAddKnowledgeBaseModalOpen] =
     useState(false);
   const toggleAddKnowledgeBaseModal = () => {
@@ -47,7 +44,6 @@ const SideMenu: React.FC<SideMenuProps> = () => {
 
   const { knowledgeBases, createKnowledgeBaseHandle } = useKnowledgeBases();
 
-  // 处理标签页切换
   const handleTabChange = (key: string) => {
     setActiveKey(key);
   };
@@ -90,21 +86,23 @@ const SideMenu: React.FC<SideMenuProps> = () => {
   ];
 
   return (
-    <div className="px-4 flex flex-col h-full">
-      <div className="h-14 w-full flex items-center border-b border-gray-200">
-        <div className="flex items-center gap-2.5 mx-4">
-          <RobotOutlined className="text-xl text-indigo-600" />
-          <div className="text-lg font-semibold select-none text-gray-900">
+    <div className="flex flex-col h-full">
+      <div className="h-14 flex items-center border-b border-zinc-100 shrink-0">
+        <div className="flex items-center gap-2.5 px-4">
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
+            <RobotOutlined className="text-base text-indigo-500" />
+          </div>
+          <div className="text-base font-semibold tracking-tight text-zinc-900 select-none">
             JChatMind
           </div>
         </div>
       </div>
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex-1 min-h-0 flex flex-col pt-1">
         <Tabs
           activeKey={activeKey}
           onChange={handleTabChange}
           items={items}
-          // className="h-full flex flex-col [&_.ant-tabs-content-holder]:flex-1 [&_.ant-tabs-content-holder]:min-h-0 [&_.ant-tabs-content]:h-full [&_.ant-tabs-tabpane]:h-full"
+          className="sidebar-tabs h-full flex flex-col [&_.ant-tabs-content-holder]:flex-1 [&_.ant-tabs-content-holder]:min-h-0 [&_.ant-tabs-content]:h-full [&_.ant-tabs-tabpane]:h-full"
         />
       </div>
       <AddAgentModal
