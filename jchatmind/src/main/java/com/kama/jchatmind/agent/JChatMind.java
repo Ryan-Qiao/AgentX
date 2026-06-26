@@ -220,20 +220,41 @@ public class JChatMind {
     private boolean think() {
         // 构建决策提示词，根据是否有可用的知识库来调整
         String thinkPrompt;
+        String toolUsePolicy = """
+
+                【工具使用规则】
+                - 只有当用户明确要求实时信息、当前城市、当前日期、天气、数据库查询或知识库检索时，才调用对应工具。
+                - 用户要求写文章、写报告、写提纲、改写、总结、解释概念、普通闲聊时，直接回答，不要为了补充背景擅自调用 getCity、getDate 或 weather。
+                - weather 只用于天气查询；不要在城市介绍、城市报告、旅游文案等普通写作任务中调用 weather。
+                - getCity 只用于查询用户当前位置；不要把它当作文章主题城市，也不要用当前位置替代用户明确指定的城市。
+                - getDate 只用于用户询问当前日期，或天气等确实需要日期参数的工具链。
+                """;
+
         if (this.availableKbs != null && !this.availableKbs.isEmpty()) {
             thinkPrompt = """
                     现在你是一个智能的具体「决策模块」
                     请根据当前对话上下文，决定下一步的动作。
+                    %s
+
+                    【结束规则】
+                    - 如果当前上下文中的工具结果已经足够回答用户，请直接给用户最终回答，不要再调用工具。
+                    - 最终回答必须面向用户总结工具返回的信息，不能只说明“已完成”。
 
                     【额外信息】
                     - 你目前拥有的知识库列表以及描述：%s
                     - 如果有缺失的上下文时，优先从知识库中进行搜索
-                    """.formatted(this.availableKbs);
+                    - 调用 KnowledgeTool 时，kbsId 必须从上面的知识库列表中选择真实 UUID，禁止编造 default、默认知识库、unknown 等不存在的 ID
+                    """.formatted(toolUsePolicy, this.availableKbs);
         } else {
             thinkPrompt = """
                     现在你是一个智能的具体「决策模块」
                     请根据当前对话上下文，决定下一步的动作。
-                    """;
+                    %s
+
+                    【结束规则】
+                    - 如果当前上下文中的工具结果已经足够回答用户，请直接给用户最终回答，不要再调用工具。
+                    - 最终回答必须面向用户总结工具返回的信息，不能只说明“已完成”。
+                    """.formatted(toolUsePolicy);
         }
 
         // 将 thinkPrompt 通过 .user(thinkPrompt) 的方式构造进入 chatClient 中
@@ -306,12 +327,6 @@ public class JChatMind {
         saveMessage(toolResponseMessage);
         refreshPendingMessages();
 
-        if (toolResponseMessage.getResponses()
-                .stream()
-                .anyMatch(resp -> resp.name().equals("terminate"))) {
-            this.agentState = AgentState.FINISHED;
-            log.info("任务结束");
-        }
     }
 
     // 单个步骤模板

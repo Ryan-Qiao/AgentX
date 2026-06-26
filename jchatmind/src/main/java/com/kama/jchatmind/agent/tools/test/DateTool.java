@@ -4,11 +4,15 @@ import com.kama.jchatmind.agent.tools.Tool;
 import com.kama.jchatmind.agent.tools.ToolType;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 @Component
 public class DateTool implements Tool {
+    private static final ZoneId DEFAULT_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
+
     @Override
     public String getName() {
         return "dateTool";
@@ -16,7 +20,7 @@ public class DateTool implements Tool {
 
     @Override
     public String getDescription() {
-        return "获取当前的日期";
+        return "获取当前日期，仅在用户明确询问今天日期，或天气等实时工具需要日期参数时使用。";
     }
 
     @Override
@@ -24,8 +28,8 @@ public class DateTool implements Tool {
         return ToolType.FIXED;
     }
 
-    @org.springframework.ai.tool.annotation.Tool(name = "getDate", description = "获取当前的日期")
+    @org.springframework.ai.tool.annotation.Tool(name = "getDate", description = "获取当前日期。仅在用户明确询问今天日期，或天气等实时工具需要日期参数时调用；不要在普通文章、报告、总结任务中调用。")
     public String getDate() {
-        return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        return LocalDate.now(DEFAULT_ZONE).format(DATE_FORMATTER);
     }
 }

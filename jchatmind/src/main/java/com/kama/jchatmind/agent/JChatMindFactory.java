@@ -146,9 +146,19 @@ public class JChatMindFactory {
         return kbDTOs;
     }
 
-    private List<Tool> resolveRuntimeTools(AgentDTO agentConfig) {
+    private List<Tool> resolveRuntimeTools(
+            AgentDTO agentConfig,
+            List<KnowledgeBaseDTO> knowledgeBases,
+            List<Message> memory
+    ) {
         // 固定工具（系统强制）
-        List<Tool> runtimeTools = new ArrayList<>(toolFacadeService.getFixedTools());
+        boolean hasKnowledgeBases = knowledgeBases != null && !knowledgeBases.isEmpty();
+        String latestUserMessage = latestUserMessage(memory);
+        List<Tool> runtimeTools = toolFacadeService.getFixedTools()
+                .stream()
+                .filter(tool -> hasKnowledgeBases || !"KnowledgeTool".equals(tool.getName()))
+                .filter(tool -> shouldExposeFixedTool(tool, latestUserMessage))
+                .collect(Collectors.toCollection(ArrayList::new));
 
         // 可选工具（按 Agent 配置）
         List<String> allowedToolNames = agentConfig.getAllowedTools();
@@ -167,6 +177,59 @@ public class JChatMindFactory {
             }
         }
         return runtimeTools;
+    }
+
+    private boolean shouldExposeFixedTool(Tool tool, String latestUserMessage) {
+        return switch (tool.getName()) {
+            case "cityTool" -> asksCurrentLocation(latestUserMessage) || asksWeather(latestUserMessage);
+            case "dateTool" -> asksCurrentDate(latestUserMessage) || asksWeather(latestUserMessage);
+            case "weatherTool" -> asksWeather(latestUserMessage);
+            default -> true;
+        };
+    }
+
+    private String latestUserMessage(List<Message> memory) {
+        for (int i = memory.size() - 1; i >= 0; i--) {
+            Message message = memory.get(i);
+            if (message instanceof UserMessage userMessage) {
+                return userMessage.getText();
+            }
+        }
+        return "";
+    }
+
+    private boolean asksWeather(String message) {
+        if (!StringUtils.hasLength(message)) {
+            return false;
+        }
+        return message.contains("天气")
+                || message.contains("气温")
+                || message.contains("温度")
+                || message.contains("降水")
+                || message.contains("下雨")
+                || message.contains("雨")
+                || message.contains("出行");
+    }
+
+    private boolean asksCurrentDate(String message) {
+        if (!StringUtils.hasLength(message)) {
+            return false;
+        }
+        return message.contains("今天几号")
+                || message.contains("今天日期")
+                || message.contains("当前日期")
+                || message.contains("现在日期")
+                || message.contains("今天是几号");
+    }
+
+    private boolean asksCurrentLocation(String message) {
+        if (!StringUtils.hasLength(message)) {
+            return false;
+        }
+        return message.contains("当前城市")
+                || message.contains("当前位置")
+                || message.contains("我在哪")
+                || message.contains("所在城市");
     }
 
     private List<ToolCallback> buildToolCallbacks(List<Tool> runtimeTools) {
@@ -232,7 +295,7 @@ public class JChatMindFactory {
         // 解析 agent 的支持的知识库
         List<KnowledgeBaseDTO> knowledgeBases = resolveRuntimeKnowledgeBases(agentConfig);
         // 解析 agent 支持的工具调用
-        List<Tool> runtimeTools = resolveRuntimeTools(agentConfig);
+        List<Tool> runtimeTools = resolveRuntimeTools(agentConfig, knowledgeBases, memory);
         // 将工具调用转换成 ToolCallback 的形式
         List<ToolCallback> toolCallbacks = buildToolCallbacks(runtimeTools);
 
