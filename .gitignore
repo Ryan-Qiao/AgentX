@@ -1,0 +1,8 @@
+.DS_Store
+
+# Runtime document storage
+data/documents/
+
+# Local Codex workspace state
+.agents/
+skills-lock.json

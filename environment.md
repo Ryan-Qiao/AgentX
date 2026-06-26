@@ -62,10 +62,6 @@ createdb jchatmind
 
 # 导入项目 SQL 脚本（建表 + 启用 pgvector 扩展）
 psql -d jchatmind -f jchatmind_assert/jchatmind.sql
-
-# 可选：导入电商示例数据
-psql -d jchatmind -f jchatmind_assert/eshop.sql
-psql -d jchatmind -f jchatmind_assert/eshop_data.sql
 ```
 
 **数据库连接信息**（配置文件：`jchatmind/src/main/resources/application.yaml`）：
