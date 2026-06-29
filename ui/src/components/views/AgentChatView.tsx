@@ -44,9 +44,22 @@ const AgentChatView: React.FC = () => {
   const rafIdRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(0);
   const pendingFinalMessageRef = useRef<ChatMessageVO | null>(null);
+  const initMessageSentRef = useRef<string | null>(null);
 
   const addMessage = (message: ChatMessageVO) => {
     setMessages((prevMessages) => [...prevMessages, message]);
+  };
+
+  const replaceMessage = (messageId: string, message: ChatMessageVO) => {
+    setMessages((prevMessages) =>
+      prevMessages.map((item) => (item.id === messageId ? message : item)),
+    );
+  };
+
+  const removeMessage = (messageId: string) => {
+    setMessages((prevMessages) =>
+      prevMessages.filter((item) => item.id !== messageId),
+    );
   };
 
   // 启动逐字打印动画消费器
@@ -107,6 +120,15 @@ const AgentChatView: React.FC = () => {
     pendingFinalMessageRef.current = null;
     lastFrameTimeRef.current = 0;
   }, []);
+
+  const showAssistantWaiting = useCallback(() => {
+    resetTypewriter();
+    setStreamingContent("");
+    setIsStreaming(true);
+    setDisplayAgentStatus(false);
+    setAgentStatusText("");
+    setAgentStatusType(undefined);
+  }, [resetTypewriter]);
 
   const [agentId, setAgentId] = useState<string>("");
 
@@ -183,6 +205,44 @@ const AgentChatView: React.FC = () => {
     antdMessage.success("当前 Agent 已记住该内容");
   };
 
+  const sendMessageToSession = useCallback(
+    async (content: string, targetAgentId: string, targetSessionId: string) => {
+      const trimmedContent = content.trim();
+      if (!trimmedContent) return;
+
+      const optimisticId = `optimistic-user-${Date.now()}`;
+      addMessage({
+        id: optimisticId,
+        sessionId: targetSessionId,
+        role: "user",
+        content: trimmedContent,
+      });
+      showAssistantWaiting();
+
+      try {
+        const response = await createChatMessage({
+          agentId: targetAgentId,
+          sessionId: targetSessionId,
+          role: "user",
+          content: trimmedContent,
+        });
+        replaceMessage(optimisticId, {
+          id: response.chatMessageId,
+          sessionId: targetSessionId,
+          role: "user",
+          content: trimmedContent,
+        });
+      } catch (error) {
+        console.error("发送聊天消息失败:", error);
+        removeMessage(optimisticId);
+        setIsStreaming(false);
+        setStreamingContent("");
+        antdMessage.error("消息发送失败，请重试");
+      }
+    },
+    [showAssistantWaiting],
+  );
+
   const handleSendMessage = async (value: string | { text: string }) => {
     const message = typeof value === "string" ? value : value.text;
 
@@ -205,8 +265,9 @@ const AgentChatView: React.FC = () => {
         navigate(`/chat/${response.chatSessionId}`, {
           replace: true,
           state: {
-            init: false,
+            init: true,
             initMessage: message,
+            initAgentId: agentId,
           },
         });
       } catch (error) {
@@ -216,24 +277,13 @@ const AgentChatView: React.FC = () => {
         setLoading(false);
       }
     } else {
-      if (state?.init) {
-        console.log("init", state.initMessage);
-        await createChatMessage({
-          agentId: agentId ?? "",
-          sessionId: chatSessionId,
-          role: "user",
-          content: state.initMessage ?? "",
-        });
-      } else {
-        console.log("ask", message);
-        await createChatMessage({
-          agentId: agentId ?? "",
-          sessionId: chatSessionId,
-          role: "user",
-          content: message,
-        });
+      const targetAgentId = agentId || state?.initAgentId || "";
+      if (!targetAgentId) {
+        antdMessage.warning("当前对话没有关联 Agent");
+        return;
       }
-      await getChatMessages();
+      console.log("ask", message);
+      await sendMessageToSession(message, targetAgentId, chatSessionId);
     }
   };
 
@@ -242,6 +292,27 @@ const AgentChatView: React.FC = () => {
   const [agentStatusType, setAgentStatusType] = useState<
     SseMessageType | undefined
   >(undefined);
+
+  useEffect(() => {
+    if (!chatSessionId || !state?.init || !state.initMessage) {
+      return;
+    }
+
+    // 等待会话详情加载完成后再发送首条消息，避免初始化消息拉取覆盖乐观 UI。
+    if (!agentId) {
+      return;
+    }
+
+    const initKey = `${chatSessionId}:${state.initMessage}`;
+    if (initMessageSentRef.current === initKey) {
+      return;
+    }
+    initMessageSentRef.current = initKey;
+
+    sendMessageToSession(state.initMessage, agentId, chatSessionId).then(() => {
+      navigate(`/chat/${chatSessionId}`, { replace: true, state: null });
+    });
+  }, [agentId, chatSessionId, navigate, sendMessageToSession, state]);
 
   useEffect(() => {
     if (!chatSessionId) {
@@ -272,6 +343,19 @@ const AgentChatView: React.FC = () => {
         // 完整消息到达：启动“假流式”逐字打印动画
         const finalMsg = message.payload.message;
         const content = finalMsg?.content || "";
+
+        if (!finalMsg) {
+          setIsStreaming(false);
+          return;
+        }
+
+        if (finalMsg.role !== "assistant") {
+          addMessage(finalMsg);
+          setIsStreaming(false);
+          setStreamingContent("");
+          setDisplayAgentStatus(false);
+          return;
+        }
 
         // 先重置状态、隐藏 agent 状态、启用打印区域
         resetTypewriter();

@@ -5,7 +5,6 @@ import { Sender } from "@ant-design/x";
 import { useNavigate } from "react-router-dom";
 import {
   type AgentVO,
-  createChatMessage,
   createChatSession,
 } from "../../../api/api.ts";
 import { getAgentEmoji } from "../../../utils";
@@ -133,15 +132,15 @@ const EmptyAgentChatView: React.FC<DefaultAgentChatViewProps> = ({
               agentId: effectiveAgentId,
               title: message.slice(0, 20),
             });
-            await createChatMessage({
-              sessionId: response.chatSessionId ?? "",
-              content: message,
-              role: "user",
-              agentId: effectiveAgentId,
-            });
             await refreshChatSessions();
             setMessage("");
-            navigate(`/chat/${response.chatSessionId}`);
+            navigate(`/chat/${response.chatSessionId}`, {
+              state: {
+                init: true,
+                initMessage: message,
+                initAgentId: effectiveAgentId,
+              },
+            });
           }}
           value={message}
           loading={loading}
