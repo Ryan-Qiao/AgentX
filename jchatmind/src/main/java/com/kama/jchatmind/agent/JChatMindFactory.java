@@ -290,6 +290,21 @@ public class JChatMindFactory {
                 """.formatted(memoryItems);
     }
 
+    private Double normalizeTemperature(String model, Double temperature) {
+        if (temperature == null) {
+            return null;
+        }
+        double maxTemperature = "glm-4.6".equals(model) ? 1.0 : 2.0;
+        return Math.max(0.0, Math.min(maxTemperature, temperature));
+    }
+
+    private Double normalizeTopP(Double topP) {
+        if (topP == null) {
+            return null;
+        }
+        return Math.max(0.0, Math.min(1.0, topP));
+    }
+
     private JChatMind buildAgentRuntime(
             Agent agent,
             List<Message> memory,
@@ -309,8 +324,8 @@ public class JChatMindFactory {
                 agent.getSystemPrompt(),
                 chatClient,
                 agentConfig.getChatOptions().getMessageLength(),
-                agentConfig.getChatOptions().getTemperature(),
-                agentConfig.getChatOptions().getTopP(),
+                normalizeTemperature(agent.getModel(), agentConfig.getChatOptions().getTemperature()),
+                normalizeTopP(agentConfig.getChatOptions().getTopP()),
                 memory,
                 toolCallbacks,
                 knowledgeBases,

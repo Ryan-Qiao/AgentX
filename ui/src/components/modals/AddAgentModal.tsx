@@ -37,6 +37,10 @@ const menuItems = [
   { key: "memory", label: "记忆管理" },
 ];
 
+const getTemperatureMax = (model: ModelType) => {
+  return model === "glm-4.6" ? 1 : 2;
+};
+
 const AddAgentModal: React.FC<AddAgentModalProps> = ({
   open,
   onClose,
@@ -130,6 +134,23 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
     }
   }, [open, editingAgent?.id]);
 
+  useEffect(() => {
+    const temperatureMax = getTemperatureMax(formData.model);
+    const currentTemperature = formData.chatOptions?.temperature;
+    if (
+      currentTemperature !== undefined &&
+      currentTemperature > temperatureMax
+    ) {
+      setFormData((prev) => ({
+        ...prev,
+        chatOptions: {
+          ...prev.chatOptions,
+          temperature: temperatureMax,
+        },
+      }));
+    }
+  }, [formData.model, formData.chatOptions?.temperature]);
+
   // 获取工具列表
   useEffect(() => {
     async function fetchTools() {
@@ -145,6 +166,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
   }, []);
 
   const isEditMode = !!editingAgent;
+  const temperatureMax = getTemperatureMax(formData.model);
 
   return (
     <Modal
@@ -243,7 +265,17 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
                     style={{ width: "300px" }}
                     value={formData.model}
                     onChange={(value: ModelType) =>
-                      setFormData({ ...formData, model: value })
+                      setFormData({
+                        ...formData,
+                        model: value,
+                        chatOptions: {
+                          ...formData.chatOptions,
+                          temperature: Math.min(
+                            formData.chatOptions?.temperature ?? 0.7,
+                            getTemperatureMax(value),
+                          ),
+                        },
+                      })
                     }
                   />
                 </div>
@@ -260,7 +292,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
                         <label className="block text-sm text-gray-600">
                           Temperature（温度）
                           <span className="text-gray-400 ml-1 text-xs">
-                            (0.0 - 2.0)
+                            (0.0 - {temperatureMax.toFixed(1)})
                           </span>
                         </label>
                         <span className="text-sm font-medium text-gray-700 min-w-[40px] text-right">
@@ -269,7 +301,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
                       </div>
                       <Slider
                         min={0}
-                        max={2}
+                        max={temperatureMax}
                         step={0.1}
                         value={formData?.chatOptions?.temperature}
                         onChange={(value) =>

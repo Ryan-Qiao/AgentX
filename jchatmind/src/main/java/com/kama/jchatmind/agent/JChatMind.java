@@ -24,7 +24,10 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -165,6 +168,38 @@ public class JChatMind {
                 })
                 .collect(Collectors.joining("\n\n"));
         log.info("\n\n========== Tool Calling ==========\n{}\n=================================\n", logMessage);
+    }
+
+    private Set<String> availableToolNames() {
+        if (availableTools == null || availableTools.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<String> names = new HashSet<>();
+        for (ToolCallback toolCallback : availableTools) {
+            names.add(toolCallback.getToolDefinition().name());
+        }
+        return names;
+    }
+
+    private List<AssistantMessage.ToolCall> executableToolCalls(List<AssistantMessage.ToolCall> toolCalls) {
+        if (toolCalls == null || toolCalls.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Set<String> availableToolNames = availableToolNames();
+        return toolCalls.stream()
+                .filter(toolCall -> availableToolNames.contains(toolCall.name()))
+                .filter(toolCall -> !"terminate".equals(toolCall.name()))
+                .toList();
+    }
+
+    private AssistantMessage withoutToolCalls(AssistantMessage output) {
+        return AssistantMessage.builder()
+                .content(output.getText())
+                .properties(output.getMetadata())
+                .media(output.getMedia())
+                .toolCalls(Collections.emptyList())
+                .build();
     }
 
     // 持久化 Message, 返回 chatMessageId
@@ -335,16 +370,22 @@ public class JChatMind {
                 .getOutput();
 
         List<AssistantMessage.ToolCall> toolCalls = output.getToolCalls();
+        List<AssistantMessage.ToolCall> executableToolCalls = executableToolCalls(toolCalls);
+        if (toolCalls != null && !toolCalls.isEmpty() && executableToolCalls.size() != toolCalls.size()) {
+            log.warn("Ignore non-executable tool calls: requested={}, executable={}",
+                    toolCalls.stream().map(AssistantMessage.ToolCall::name).toList(),
+                    executableToolCalls.stream().map(AssistantMessage.ToolCall::name).toList());
+        }
 
         // 保存
-        saveMessage(output);
+        saveMessage(executableToolCalls.isEmpty() ? withoutToolCalls(output) : output);
         refreshPendingMessages();
 
         // 打印工具调用
         logToolCalls(toolCalls);
 
         // 如果工具调用不为空，则进入执行阶段
-        return !toolCalls.isEmpty();
+        return !executableToolCalls.isEmpty() && executableToolCalls.size() == toolCalls.size();
     }
 
 
