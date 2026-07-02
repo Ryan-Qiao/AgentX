@@ -161,14 +161,17 @@ const AgentChatView: React.FC = () => {
       return;
     }
     const resp = await getChatMessagesBySessionId(chatSessionId);
-    setMessages(resp.chatMessages);
+    const isSendingInitMessage = Boolean(state?.init && state.initMessage);
+    if (!(isSendingInitMessage && resp.chatMessages.length === 0)) {
+      setMessages(resp.chatMessages);
+    }
 
     const fetchData = async () => {
       const resp = await getChatSession(chatSessionId);
-      setAgentId(resp.chatSession.agentId);
+      setAgentId(resp.chatSession.agentId ?? "");
     };
     fetchData().then();
-  }, [chatSessionId]);
+  }, [chatSessionId, state]);
 
   useEffect(() => {
     if (!chatSessionId) {
@@ -330,18 +333,19 @@ const AgentChatView: React.FC = () => {
       return;
     }
 
-    // 等待会话详情加载完成后再发送首条消息，避免初始化消息拉取覆盖乐观 UI。
-    if (!agentId) {
+    const targetAgentId = state.initAgentId || agentId;
+    if (!targetAgentId) {
       return;
     }
 
-    const initKey = `${chatSessionId}:${state.initMessage}`;
+    const initKey = `${chatSessionId}:${targetAgentId}:${state.initMessage}`;
     if (initMessageSentRef.current === initKey) {
       return;
     }
     initMessageSentRef.current = initKey;
+    setAgentId(targetAgentId);
 
-    sendMessageToSession(state.initMessage, agentId, chatSessionId).then(() => {
+    sendMessageToSession(state.initMessage, targetAgentId, chatSessionId).then(() => {
       navigate(`/chat/${chatSessionId}`, { replace: true, state: null });
     });
   }, [agentId, chatSessionId, navigate, sendMessageToSession, state]);
@@ -407,14 +411,20 @@ const AgentChatView: React.FC = () => {
         pendingFinalMessageRef.current = finalMsg;
         startTypewriter();
       } else if (message.type === "AI_PLANNING") {
+        setIsStreaming(false);
+        setStreamingContent("");
         setDisplayAgentStatus(true);
         setAgentStatusText(message.payload.statusText);
         setAgentStatusType("AI_PLANNING");
       } else if (message.type === "AI_THINKING") {
+        setIsStreaming(false);
+        setStreamingContent("");
         setDisplayAgentStatus(true);
         setAgentStatusText(message.payload.statusText);
         setAgentStatusType("AI_THINKING");
       } else if (message.type === "AI_EXECUTING") {
+        setIsStreaming(false);
+        setStreamingContent("");
         setDisplayAgentStatus(true);
         setAgentStatusText(message.payload.statusText);
         setAgentStatusType("AI_EXECUTING");

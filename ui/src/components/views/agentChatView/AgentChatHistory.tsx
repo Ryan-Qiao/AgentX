@@ -283,8 +283,8 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
         </div>
       )}
 
-      {/* Agent 状态（规划中/思考中/执行中）—— 仅在没有流式内容时显示 */}
-      {displayAgentStatus && !isStreaming && (
+      {/* Agent 状态（规划中/思考中/执行中）—— 等待首字期间也需要展示工具进度 */}
+      {displayAgentStatus && (!isStreaming || !streamingContent) && (
         <div className="mb-3 animate-pulse">
           <Bubble
             content={

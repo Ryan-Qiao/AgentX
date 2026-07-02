@@ -5,8 +5,10 @@ import com.kama.jchatmind.converter.ChatMessageConverter;
 import com.kama.jchatmind.event.ChatEvent;
 import com.kama.jchatmind.exception.BizException;
 import com.kama.jchatmind.mapper.ChatMessageMapper;
+import com.kama.jchatmind.mapper.ChatSessionMapper;
 import com.kama.jchatmind.model.dto.ChatMessageDTO;
 import com.kama.jchatmind.model.entity.ChatMessage;
+import com.kama.jchatmind.model.entity.ChatSession;
 import com.kama.jchatmind.model.request.CreateChatMessageRequest;
 import com.kama.jchatmind.model.request.UpdateChatMessageRequest;
 import com.kama.jchatmind.model.response.CreateChatMessageResponse;
@@ -16,6 +18,7 @@ import com.kama.jchatmind.service.ChatMessageFacadeService;
 import lombok.AllArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -26,6 +29,7 @@ import java.util.List;
 public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
 
     private final ChatMessageMapper chatMessageMapper;
+    private final ChatSessionMapper chatSessionMapper;
     private final ChatMessageConverter chatMessageConverter;
     private final ApplicationEventPublisher publisher;
 
@@ -66,9 +70,16 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
     @Override
     public CreateChatMessageResponse createChatMessage(CreateChatMessageRequest request) {
         ChatMessage chatMessage = doCreateChatMessage(request);
+        ChatSession chatSession = chatSessionMapper.selectById(chatMessage.getSessionId());
+        if (chatSession == null) {
+            throw new BizException("聊天会话不存在: " + chatMessage.getSessionId());
+        }
+        if (!StringUtils.hasText(chatSession.getAgentId())) {
+            throw new BizException("当前聊天会话没有关联 Agent: " + chatMessage.getSessionId());
+        }
         // 发布聊天通知事件
         publisher.publishEvent(new ChatEvent(
-                        request.getAgentId(),
+                        chatSession.getAgentId(),
                         chatMessage.getSessionId(),
                         chatMessage.getContent()
                 )
@@ -208,4 +219,3 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
         }
     }
 }
-

@@ -1,4 +1,4 @@
-export const getAgentEmoji = (agentId: string): string => {
+export const getAgentEmoji = (agentId?: string | null): string => {
   // 使用 agent id 的哈希值来选择 emoji，确保同一个 agent 总是显示相同的 emoji
   const EMOJI_LIST = [
     "🤖",
@@ -12,6 +12,9 @@ export const getAgentEmoji = (agentId: string): string => {
     "🔧",
     "📚",
   ];
+  if (!agentId) {
+    return "💬";
+  }
   let hash = 0;
   for (let i = 0; i < agentId.length; i++) {
     hash = (hash << 5) - hash + agentId.charCodeAt(i);

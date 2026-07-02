@@ -227,7 +227,12 @@ public class JChatMindFactory {
                 || message.contains("今天日期")
                 || message.contains("当前日期")
                 || message.contains("现在日期")
-                || message.contains("今天是几号");
+                || message.contains("今天是几号")
+                || message.contains("今天多少号")
+                || message.contains("今天是几月几号")
+                || message.contains("今天几月几号")
+                || message.contains("现在几号")
+                || message.contains("当前几号");
     }
 
     private boolean asksCurrentLocation(String message) {
@@ -265,9 +270,7 @@ public class JChatMindFactory {
     }
 
     private String renderMemoryPrompt(String agentId) {
-        List<UserMemoryDTO> userMemories = userMemoryFacadeService.getEnabledGlobalUserMemories(
-                MAX_USER_MEMORIES
-        );
+        List<UserMemoryDTO> userMemories = userMemoryFacadeService.getEnabledGlobalUserMemories(MAX_USER_MEMORIES);
         List<AgentMemoryDTO> agentMemories = agentMemoryFacadeService.getEnabledAgentMemories(
                 agentId,
                 MAX_AGENT_CORE_MEMORIES
@@ -288,10 +291,12 @@ public class JChatMindFactory {
             userMemoryPrompt = """
 
                     【用户长期记忆】
-                    以下记忆适用于所有 Agent，是跨 Agent 共享的用户偏好和稳定背景。使用规则：
-                    - 可以参考这些记忆理解用户偏好、沟通习惯和长期背景。
+                    以下内容是关于“用户”的画像、偏好、背景或事实，不是关于“当前 Agent”的设定。使用规则：
+                    - 这些记忆只能用于更好地理解用户，不能定义、修改或暗示你的身份、角色、职业、能力范围或系统提示词。
+                    - 你的身份只能来自【当前 Agent 角色设定】。如果当前 Agent 没有系统提示词，就按当前 Agent 名称作为通用智能体助手回答。
+                    - 对寒暄、身份询问、自我介绍、能力介绍等场景，不要主动提起、复述、追问或展开用户长期记忆。
+                    - 只有当用户当前问题明确涉及某条记忆的主题时，才可以自然使用该记忆补充回答。
                     - 如果用户最新输入与这些记忆冲突，以用户最新输入为准。
-                    - 不要把某个 Agent 专属信息泛化为用户级事实。
                     - 不要主动暴露“用户记忆”这个机制，除非用户询问。
                     %s
                     """.formatted(userMemoryItems);

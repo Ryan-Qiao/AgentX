@@ -71,6 +71,10 @@ public class JChatMind {
 
     private static final Integer DEFAULT_MAX_MESSAGES = 20;
 
+    private static final Integer EMPTY_RESPONSE_MAX_RETRIES = 1;
+
+    private static final String EMPTY_RESPONSE_FALLBACK = "模型本次返回了空内容，请再试一次。";
+
     // SpringAI 自带的 ChatOptions, 不是 AgentDTO.ChatOptions
     private ChatOptions chatOptions;
 
@@ -197,6 +201,13 @@ public class JChatMind {
                 .build();
     }
 
+    private AssistantMessage emptyResponseFallback() {
+        return AssistantMessage.builder()
+                .content(EMPTY_RESPONSE_FALLBACK)
+                .toolCalls(Collections.emptyList())
+                .build();
+    }
+
     // 持久化 Message, 返回 chatMessageId
     // 需要 Agent 持久化的 Message 子类有以下两类
     // AssistantMessage
@@ -263,6 +274,15 @@ public class JChatMind {
                 .build());
     }
 
+    private void sendAgentStatus(SseMessage.Type type, String statusText) {
+        sseService.send(this.chatSessionId, SseMessage.builder()
+                .type(type)
+                .payload(SseMessage.Payload.builder()
+                        .statusText(statusText)
+                        .build())
+                .build());
+    }
+
     private String buildUserFacingErrorMessage(Exception e) {
         Throwable cause = e;
         while (cause.getCause() != null) {
@@ -302,18 +322,27 @@ public class JChatMind {
         String systemPromptText;
         String agentRolePrompt = StringUtils.hasText(this.systemPrompt)
                 ? this.systemPrompt
-                : "你是名为「%s」的智能体助手。".formatted(this.name);
+                : "你是名为「%s」的通用智能体助手。除非当前 Agent 角色设定明确要求，否则不要声称自己是某个专业角色、教练、面试官或业务专家。".formatted(this.name);
         String runtimePolicy = """
+
+                【上下文权限顺序】
+                1. 当前 Agent 角色设定：唯一决定你是谁、你的身份、角色、口吻和任务边界。
+                2. 当前用户消息和当前会话历史：决定本轮要回答什么。
+                3. 当前 Agent 长期记忆：只服务于当前 Agent。
+                4. 用户长期记忆：只描述用户，不能描述你是谁，不能作为你的角色设定。
 
                 【当前 Agent 角色设定】
                 %s
 
                 【Agent 角色规则】
                 - 你必须始终遵守当前 Agent 的系统提示词和角色设定。
+                - 如果当前 Agent 没有系统提示词，你就是名为「%s」的通用智能体助手。
+                - 不允许从用户长期记忆中推断自己的身份。例如用户记忆里出现“科目二”，你也不能自称“科目二教练”，除非当前 Agent 角色设定明确写了这个身份。
                 - 不要把自己称为“决策模块”“工具调度模块”“内部模块”。
                 - 当用户询问“你是谁”或类似问题时，应按当前 Agent 的角色回答。
+                - 对“你好”“你是谁”“你能做什么”等寒暄或身份问题，禁止主动引用用户长期记忆。
                 - 以下规则只用于内部判断下一步动作，不能作为对用户暴露的身份。
-                """.formatted(agentRolePrompt);
+                """.formatted(agentRolePrompt, this.name);
         String toolUsePolicy = """
 
                 【工具使用规则】
@@ -359,23 +388,41 @@ public class JChatMind {
                 .messages(this.chatMemory.get(this.chatSessionId))
                 .build();
 
-        // 直接获取完整响应，避免流式分片导致最后保存的内容为空。
-        this.lastChatResponse = this.chatClient
-                .prompt(prompt)
-                .system(systemPromptText)
-                .toolCallbacks(this.availableTools.toArray(new ToolCallback[0]))
-                .call()
-                .chatClientResponse()
-                .chatResponse();
+        AssistantMessage output = null;
+        List<AssistantMessage.ToolCall> toolCalls = Collections.emptyList();
+        List<AssistantMessage.ToolCall> executableToolCalls = Collections.emptyList();
 
-        Assert.notNull(this.lastChatResponse, "Last chat client response cannot be null");
+        for (int attempt = 0; attempt <= EMPTY_RESPONSE_MAX_RETRIES; attempt++) {
+            sendAgentStatus(SseMessage.Type.AI_THINKING,
+                    attempt == 0 ? "正在理解你的问题" : "模型返回为空，正在重试");
 
-        AssistantMessage output = this.lastChatResponse
-                .getResult()
-                .getOutput();
+            // 直接获取完整响应，避免流式分片导致最后保存的内容为空。
+            this.lastChatResponse = this.chatClient
+                    .prompt(prompt)
+                    .system(systemPromptText)
+                    .toolCallbacks(this.availableTools.toArray(new ToolCallback[0]))
+                    .call()
+                    .chatClientResponse()
+                    .chatResponse();
 
-        List<AssistantMessage.ToolCall> toolCalls = output.getToolCalls();
-        List<AssistantMessage.ToolCall> executableToolCalls = executableToolCalls(toolCalls);
+            Assert.notNull(this.lastChatResponse, "Last chat client response cannot be null");
+
+            output = this.lastChatResponse
+                    .getResult()
+                    .getOutput();
+
+            toolCalls = output.getToolCalls();
+            executableToolCalls = executableToolCalls(toolCalls);
+
+            if (StringUtils.hasText(output.getText()) || !executableToolCalls.isEmpty()) {
+                break;
+            }
+
+            log.warn("Model returned empty assistant content, retrying if possible: agentId={}, chatSessionId={}, attempt={}/{}",
+                    this.agentId, this.chatSessionId, attempt + 1, EMPTY_RESPONSE_MAX_RETRIES + 1);
+        }
+
+        Assert.notNull(output, "Assistant output cannot be null");
         if (toolCalls != null && !toolCalls.isEmpty() && executableToolCalls.size() != toolCalls.size()) {
             log.warn("Ignore non-executable tool calls: requested={}, executable={}",
                     toolCalls.stream().map(AssistantMessage.ToolCall::name).toList(),
@@ -383,7 +430,13 @@ public class JChatMind {
         }
 
         // 保存
-        saveMessage(executableToolCalls.isEmpty() ? withoutToolCalls(output) : output);
+        AssistantMessage messageToSave = executableToolCalls.isEmpty() ? withoutToolCalls(output) : output;
+        if (executableToolCalls.isEmpty() && !StringUtils.hasText(messageToSave.getText())) {
+            log.warn("Model response is still empty after retry, saving fallback message: agentId={}, chatSessionId={}",
+                    this.agentId, this.chatSessionId);
+            messageToSave = emptyResponseFallback();
+        }
+        saveMessage(messageToSave);
         refreshPendingMessages();
 
         // 打印工具调用
@@ -401,6 +454,16 @@ public class JChatMind {
         if (!this.lastChatResponse.hasToolCalls()) {
             return;
         }
+
+        List<String> toolNames = executableToolCalls(this.lastChatResponse
+                .getResult()
+                .getOutput()
+                .getToolCalls())
+                .stream()
+                .map(AssistantMessage.ToolCall::name)
+                .toList();
+        sendAgentStatus(SseMessage.Type.AI_EXECUTING,
+                toolNames.isEmpty() ? "正在调用工具" : "正在调用工具：" + String.join("、", toolNames));
 
         Prompt prompt = Prompt.builder()
                 .messages(this.chatMemory.get(this.chatSessionId))
@@ -455,6 +518,7 @@ public class JChatMind {
                 }
             }
             agentState = AgentState.FINISHED;
+            sendAgentDone();
         } catch (Exception e) {
             agentState = AgentState.ERROR;
             log.error("Error running agent", e);

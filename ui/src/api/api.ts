@@ -237,7 +237,7 @@ export async function createChatSession(
  */
 export interface ChatSessionVO {
   id: string;
-  agentId: string;
+  agentId?: string | null;
   title?: string;
 }
 

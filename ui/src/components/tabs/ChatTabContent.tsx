@@ -39,15 +39,21 @@ const ChatTabContent: React.FC = () => {
     await deleteChatSession(chatSessionId);
   };
 
-  const getDisplayTitle = (session: { title?: string; agentId: string }) => {
+  const getDisplayTitle = (session: { title?: string; agentId?: string | null }) => {
     if (session.title) {
       return session.title;
+    }
+    if (!session.agentId) {
+      return "历史对话";
     }
     const agent = agentMap.get(session.agentId);
     return agent ? `与 ${agent.name} 的对话` : "新对话";
   };
 
-  const getAgentLabel = (agentId: string) => {
+  const getAgentLabel = (agentId?: string | null) => {
+    if (!agentId) {
+      return "已删除的智能体";
+    }
     return agentMap.get(agentId)?.name ?? "已删除的智能体";
   };
 
