@@ -51,9 +51,9 @@ brew install pgvector
 **数据库初始化：**
 
 ```bash
-# 创建 postgres 用户（Homebrew 默认不创建，但项目配置需要）
+# 创建 postgres 用户（Homebrew 默认不创建；密码请自行设置）
 psql -d postgres
-CREATE USER postgres WITH PASSWORD '123456';
+CREATE USER postgres WITH PASSWORD '你的数据库密码';
 ALTER USER postgres WITH SUPERUSER;
 \q
 
@@ -71,7 +71,7 @@ psql -d jchatmind -f jchatmind_assert/jchatmind.sql
 | 地址 | `localhost:5432` |
 | 数据库名 | `jchatmind` |
 | 用户名 | `postgres` |
-| 密码 | `123456` |
+| 密码 | 通过 `DB_PASSWORD` 环境变量配置 |
 
 ### 4. Node.js 18+
 
@@ -118,18 +118,53 @@ curl http://localhost:11434/api/embeddings -d '{
 
 > **注意：** Ollama 服务需要保持运行状态，知识库检索功能才能正常工作。
 
+### 6. MarkItDown
+
+知识库多格式文档导入依赖 MarkItDown。非 Markdown/TXT 文件会先通过 MarkItDown CLI 转换成 Markdown，再进入分块和 embedding 流程。
+
+推荐使用 `uv tool` 安装，避免污染系统 Python：
+
+```bash
+brew install uv
+uv tool install 'markitdown[all]'
+
+# 验证
+markitdown --version
+```
+
+如果 `markitdown` 不在 PATH 中，可以通过环境变量指定完整路径：
+
+```bash
+export MARKITDOWN_COMMAND=/Users/ryan/.local/bin/markitdown
+```
+
+> **注意：** MarkItDown 如果提示缺少 `ffmpeg`，主要影响音频/视频类转换；普通 DOCX、HTML、PDF 等文本型文档不受影响。
+
 ---
 
 ## 二、API Key 配置
 
-在 `jchatmind/src/main/resources/application.yaml` 中替换以下占位符：
+项目敏感配置通过环境变量读取，不要把真实密钥写进 `application.yaml`。
 
-| 配置项 | 说明 | 是否必需 |
-|--------|------|----------|
-| `spring.ai.deepseek.api-key` | [DeepSeek API Key](https://platform.deepseek.com/)（AI 对话） | **必需** |
-| `spring.ai.zhipuai.api-key` | [智谱 AI API Key](https://open.bigmodel.cn/)（GLM 模型） | **必需** |
-| `spring.mail.username` | QQ 邮箱地址（邮件发送） | 可选 |
-| `spring.mail.password` | QQ 邮箱授权码 | 可选 |
+```bash
+export DB_URL=jdbc:postgresql://localhost:5432/jchatmind
+export DB_USERNAME=postgres
+export DB_PASSWORD=你的数据库密码
+export DEEPSEEK_API_KEY=你的 DeepSeek Key
+export ZHIPUAI_API_KEY=你的智谱 Key
+export MARKITDOWN_COMMAND=markitdown
+```
+
+| 环境变量 | 说明 | 是否必需 |
+|----------|------|----------|
+| `DB_URL` | PostgreSQL 连接地址 | 必需 |
+| `DB_USERNAME` | PostgreSQL 用户名 | 必需 |
+| `DB_PASSWORD` | PostgreSQL 密码 | 必需 |
+| `DEEPSEEK_API_KEY` | [DeepSeek API Key](https://platform.deepseek.com/) | 至少配置一个模型 |
+| `ZHIPUAI_API_KEY` | [智谱 AI API Key](https://open.bigmodel.cn/) | 至少配置一个模型 |
+| `MARKITDOWN_COMMAND` | MarkItDown CLI 命令或完整路径 | 多格式导入必需 |
+| `MAIL_USERNAME` | QQ 邮箱地址 | 可选 |
+| `MAIL_PASSWORD` | QQ 邮箱授权码 | 可选 |
 
 ---
 
@@ -154,11 +189,21 @@ brew services start postgresql@17
 # 2. 启动 Ollama 服务（知识库检索需要）
 brew services start ollama
 
-# 3. 启动后端服务（默认端口 8080）
+# 3. 确认 MarkItDown 可用（多格式文档导入需要）
+markitdown --version
+
+# 4. 配置必要环境变量
+export DB_URL=jdbc:postgresql://localhost:5432/jchatmind
+export DB_USERNAME=postgres
+export DB_PASSWORD=你的数据库密码
+export DEEPSEEK_API_KEY=你的 DeepSeek Key
+export ZHIPUAI_API_KEY=你的智谱 Key
+
+# 5. 启动后端服务（默认端口 8080）
 cd jchatmind
 ./mvnw spring-boot:run
 
-# 4. 启动前端开发服务器（新开终端，默认端口 5173）
+# 6. 启动前端开发服务器（新开终端，默认端口 5173）
 cd ui
 npm run dev
 ```
@@ -178,12 +223,13 @@ npm run dev
 - [ ] Maven 已安装或使用 mvnw
 - [ ] PostgreSQL 17 已安装并启动
 - [ ] PostgreSQL PATH 已配置
-- [ ] `postgres` 用户已创建（密码 `123456`）
+- [ ] `postgres` 用户已创建，且 `DB_PASSWORD` 与数据库密码一致
 - [ ] pgvector 扩展已安装并启用
 - [ ] `jchatmind` 数据库已创建并导入 SQL 脚本
 - [ ] Node.js 18+ 已安装（`node -v`）
 - [ ] 前端依赖已安装（`npm install`）
 - [ ] Ollama 已安装并运行，bge-m3 模型已下载
+- [ ] MarkItDown 已安装（`markitdown --version`）
 - [ ] DeepSeek API Key 已配置
 - [ ] 智谱 AI API Key 已配置
 
@@ -248,3 +294,24 @@ ollama list
 # 如果没有，拉取模型
 ollama pull bge-m3
 ```
+
+### Q: 上传 PDF / DOCX / PPTX 提示 MarkItDown 不可用
+
+```bash
+# 检查命令是否可用
+command -v markitdown
+markitdown --version
+
+# 如果未安装
+brew install uv
+uv tool install 'markitdown[all]'
+
+# 如果后端启动进程找不到命令，指定完整路径
+export MARKITDOWN_COMMAND=/Users/ryan/.local/bin/markitdown
+```
+
+### Q: 文档里有图片、扫描件或截图，检索不到图片内容
+
+当前基础版主要处理文本型文档。图片、扫描件、截图、流程图、图片表格不保证完整解析。
+
+后续可以接入 OCR 或 Vision 模型增强图片内容解析。
