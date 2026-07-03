@@ -58,6 +58,7 @@ public class DocumentConverter {
                 .filename(dto.getFilename())
                 .filetype(dto.getFiletype())
                 .size(dto.getSize())
+                .metadata(dto.getMetadata())
                 .build();
     }
 

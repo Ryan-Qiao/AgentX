@@ -429,6 +429,14 @@ export interface DocumentVO {
   filename: string;
   filetype: string;
   size: number;
+  metadata?: {
+    filePath?: string;
+    markdownPath?: string;
+    originalFileType?: string;
+    conversionTool?: string;
+    conversionStatus?: string;
+    conversionError?: string;
+  };
 }
 
 export interface GetDocumentsResponse {

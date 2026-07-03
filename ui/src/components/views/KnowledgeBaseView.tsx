@@ -9,6 +9,7 @@ import {
   message,
   Empty,
   Typography,
+  Tag,
 } from "antd";
 import {
   BookOutlined,
@@ -97,6 +98,24 @@ const KnowledgeBaseView: React.FC = () => {
       render: (size: number) => formatFileSize(size),
     },
     {
+      title: "转换状态",
+      key: "conversionStatus",
+      width: 160,
+      render: (_: unknown, record: DocumentVO) => {
+        const status = record.metadata?.conversionStatus;
+        if (status === "success") {
+          return <Tag color="green">已入库</Tag>;
+        }
+        if (status === "failed") {
+          return <Tag color="red">转换失败</Tag>;
+        }
+        if (status === "pending") {
+          return <Tag color="orange">处理中</Tag>;
+        }
+        return <Tag>未知</Tag>;
+      },
+    },
+    {
       title: "操作",
       key: "action",
       width: 100,
@@ -182,7 +201,7 @@ const KnowledgeBaseView: React.FC = () => {
           <Upload
             customRequest={handleUpload}
             showUploadList={false}
-            accept=".md"
+            accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.xlsx,.html,.csv,.json,.xml"
             disabled={uploading}
           >
             <Button
@@ -193,7 +212,9 @@ const KnowledgeBaseView: React.FC = () => {
               选择文件上传
             </Button>
           </Upload>
-          <p className="text-xs text-zinc-400 mt-2">支持格式: Markdown</p>
+          <p className="text-xs text-zinc-400 mt-2">
+            支持格式: Markdown、TXT、PDF、Word、PPT、Excel、HTML、CSV、JSON、XML。图片、扫描件和嵌入图片内容暂不保证完整解析。
+          </p>
         </div>
 
         {/* 文档列表 */}

@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 @Service
@@ -50,6 +51,22 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
         log.info("文件保存成功: kbId={}, documentId={}, filename={}, path={}", 
                 kbId, documentId, originalFilename, relativePath);
         
+        return relativePath;
+    }
+
+    @Override
+    public String saveTextFile(String kbId, String documentId, String filename, String content) throws IOException {
+        Path documentDir = Paths.get(baseStoragePath, kbId, documentId);
+        Files.createDirectories(documentDir);
+
+        String safeFilename = filename == null || filename.trim().isEmpty()
+                ? UUID.randomUUID() + ".md"
+                : filename.replaceAll("[\\\\/:*?\"<>|]", "_");
+        Path targetPath = documentDir.resolve(safeFilename);
+        Files.writeString(targetPath, content, StandardCharsets.UTF_8);
+
+        String relativePath = Paths.get(kbId, documentId, safeFilename).toString().replace("\\", "/");
+        log.info("文本文件保存成功: kbId={}, documentId={}, path={}", kbId, documentId, relativePath);
         return relativePath;
     }
 

@@ -41,3 +41,10 @@ mybatis:
 document:
   storage:
     base-path: ${DOCUMENT_STORAGE_BASE_PATH:./data/documents}
+
+rag:
+  document-converter:
+    markitdown-command: ${MARKITDOWN_COMMAND:markitdown}
+    timeout-seconds: ${MARKITDOWN_TIMEOUT_SECONDS:60}
+    max-file-size-mb: ${RAG_DOCUMENT_MAX_FILE_SIZE_MB:30}
+    enabled-formats: ${RAG_DOCUMENT_ENABLED_FORMATS:md,markdown,txt,pdf,docx,pptx,xlsx,html,csv,json,xml}

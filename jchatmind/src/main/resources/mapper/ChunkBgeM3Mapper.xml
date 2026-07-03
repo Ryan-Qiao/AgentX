@@ -34,7 +34,7 @@
         VALUES (CAST(#{kbId} AS uuid),
                 CAST(#{docId} AS uuid),
                 #{content},
-                #{metadata},
+                CAST(#{metadata} AS jsonb),
                 #{embedding}::vector,
                 #{createdAt},
                 #{updatedAt})
@@ -72,7 +72,7 @@
                 content = #{content},
             </if>
             <if test="metadata != null">
-                metadata = #{metadata},
+                metadata = CAST(#{metadata} AS jsonb),
             </if>
             <if test="embedding != null">
                 embedding = #{embedding}::vector,

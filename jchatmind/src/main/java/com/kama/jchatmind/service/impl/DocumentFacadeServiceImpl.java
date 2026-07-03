@@ -14,21 +14,26 @@ import com.kama.jchatmind.model.vo.DocumentVO;
 import com.kama.jchatmind.mapper.ChunkBgeM3Mapper;
 import com.kama.jchatmind.model.entity.ChunkBgeM3;
 import com.kama.jchatmind.service.DocumentFacadeService;
+import com.kama.jchatmind.service.DocumentConversionService;
 import com.kama.jchatmind.service.DocumentStorageService;
 import com.kama.jchatmind.service.MarkdownParserService;
 import com.kama.jchatmind.service.RagService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @AllArgsConstructor
@@ -38,6 +43,7 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
     private final DocumentMapper documentMapper;
     private final DocumentConverter documentConverter;
     private final DocumentStorageService documentStorageService;
+    private final DocumentConversionService documentConversionService;
     private final MarkdownParserService markdownParserService;
     private final RagService ragService;
     private final ChunkBgeM3Mapper chunkBgeM3Mapper;
@@ -116,6 +122,9 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
             String originalFilename = file.getOriginalFilename();
             String filetype = getFileType(originalFilename);
             long fileSize = file.getSize();
+            if (!documentConversionService.supports(filetype)) {
+                throw new BizException("不支持的文件类型: " + filetype);
+            }
 
             // 创建文档记录（先创建记录，获取 documentId）
             DocumentDTO documentDTO = DocumentDTO.builder()
@@ -144,6 +153,8 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
             // 更新文档记录，保存文件路径到 metadata
             DocumentDTO.MetaData metadata = new DocumentDTO.MetaData();
             metadata.setFilePath(filePath);
+            metadata.setOriginalFileType(filetype);
+            metadata.setConversionStatus("pending");
             documentDTO.setMetadata(metadata);
             documentDTO.setId(documentId);
             documentDTO.setCreatedAt(now);
@@ -158,13 +169,7 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
 
             log.info("文档上传成功: kbId={}, documentId={}, filename={}", kbId, documentId, originalFilename);
 
-            // 如果是 Markdown 文件，进行解析并生成 chunks
-            if ("md".equalsIgnoreCase(filetype) || "markdown".equalsIgnoreCase(filetype)) {
-                processMarkdownDocument(kbId, documentId, filePath);
-            } else {
-                // TODO: 未来可以增加其他文件类型的处理逻辑
-                log.warn("待新增处理的文件类型: {}", filetype);
-            }
+            processUploadedDocument(kbId, documentId, originalFilename, filetype, filePath, documentDTO);
 
             return CreateDocumentResponse.builder()
                     .documentId(documentId)
@@ -189,6 +194,12 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
                 String filePath = documentDTO.getMetadata().getFilePath();
                 documentStorageService.deleteFile(filePath);
             }
+            if (documentDTO.getMetadata() != null
+                    && documentDTO.getMetadata().getMarkdownPath() != null
+                    && !documentDTO.getMetadata().getMarkdownPath().equals(documentDTO.getMetadata().getFilePath())) {
+                String markdownPath = documentDTO.getMetadata().getMarkdownPath();
+                documentStorageService.deleteFile(markdownPath);
+            }
         } catch (Exception e) {
             log.warn("删除文件失败，继续删除文档记录: documentId={}, error={}", documentId, e.getMessage());
             // 即使文件删除失败，也继续删除数据库记录
@@ -202,66 +213,135 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
     }
 
     /**
-     * 处理 Markdown 文档，解析并生成 chunks
+     * 将上传文档转换为 Markdown，并解析生成 chunks。
      */
-    private void processMarkdownDocument(String kbId, String documentId, String filePath) {
+    private void processUploadedDocument(
+            String kbId,
+            String documentId,
+            String originalFilename,
+            String fileType,
+            String filePath,
+            DocumentDTO documentDTO
+    ) {
         try {
-            log.info("开始处理 Markdown 文档: kbId={}, documentId={}, filePath={}", kbId, documentId, filePath);
+            log.info("开始处理上传文档: kbId={}, documentId={}, filePath={}, fileType={}",
+                    kbId, documentId, filePath, fileType);
 
-            // 从保存的文件路径读取文件
             Path path = documentStorageService.getFilePath(filePath);
-            try (InputStream inputStream = Files.newInputStream(path)) {
-                // 解析 Markdown 文件
-                List<MarkdownParserService.MarkdownSection> sections = markdownParserService.parseMarkdown(inputStream);
+            String markdown = documentConversionService.convertToMarkdown(path, fileType, originalFilename);
+            markdown = ensureMarkdownHasTitle(markdown, originalFilename);
 
-                System.out.println(sections);
-
-                if (sections.isEmpty()) {
-                    log.warn("Markdown 文档解析后没有找到任何章节: documentId={}", documentId);
-                    return;
-                }
-
-                LocalDateTime now = LocalDateTime.now();
-                int chunkCount = 0;
-
-                // 为每个章节生成 chunk
-                for (MarkdownParserService.MarkdownSection section : sections) {
-                    String title = section.getTitle();
-                    String content = section.getContent();
-
-                    if (title == null || title.trim().isEmpty()) {
-                        continue;
-                    }
-
-                    // 对标题进行 embedding
-                    float[] embedding = ragService.embed(title);
-
-                    // 创建 ChunkBgeM3 实体
-                    ChunkBgeM3 chunk = ChunkBgeM3.builder()
-                            .kbId(kbId)
-                            .docId(documentId)
-                            .content(content != null ? content : "")
-                            .metadata(null) // 可以存储标题信息到 metadata
-                            .embedding(embedding)
-                            .createdAt(now)
-                            .updatedAt(now)
-                            .build();
-
-                    // 插入数据库
-                    int result = chunkBgeM3Mapper.insert(chunk);
-
-                    if (result > 0) {
-                        chunkCount++;
-                        log.debug("创建 chunk 成功: title={}, chunkId={}", title, chunk.getId());
-                    } else {
-                        log.warn("创建 chunk 失败: title={}", title);
-                    }
-                }
-                log.info("Markdown 文档处理完成: documentId={}, 共生成 {} 个 chunks", documentId, chunkCount);
+            String markdownPath = filePath;
+            if (documentConversionService.requiresConversion(fileType)) {
+                markdownPath = documentStorageService.saveTextFile(
+                        kbId,
+                        documentId,
+                        buildConvertedMarkdownFilename(originalFilename),
+                        markdown
+                );
             }
+
+            DocumentDTO.MetaData metadata = documentDTO.getMetadata();
+            metadata.setMarkdownPath(markdownPath);
+            metadata.setConversionTool(documentConversionService.requiresConversion(fileType) ? "markitdown-cli" : "direct");
+            metadata.setConversionStatus("success");
+            metadata.setConversionError(null);
+            updateDocumentMetadata(documentDTO);
+
+            processMarkdownContent(kbId, documentId, markdown, originalFilename);
         } catch (Exception e) {
-            log.error("处理 Markdown 文档失败: documentId={}", documentId, e);
-            // 不抛出异常，避免影响文档上传流程
+            log.error("处理上传文档失败: documentId={}", documentId, e);
+            DocumentDTO.MetaData metadata = documentDTO.getMetadata();
+            metadata.setConversionStatus("failed");
+            metadata.setConversionError(e.getMessage());
+            updateDocumentMetadata(documentDTO);
+            if (e instanceof BizException bizException) {
+                throw bizException;
+            }
+            throw new BizException("处理文档失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理 Markdown 内容，解析并生成 chunks。
+     */
+    private void processMarkdownContent(String kbId, String documentId, String markdown, String originalFilename) {
+        try (InputStream inputStream = new ByteArrayInputStream(markdown.getBytes(StandardCharsets.UTF_8))) {
+            List<MarkdownParserService.MarkdownSection> sections = markdownParserService.parseMarkdown(inputStream);
+
+            if (sections.isEmpty()) {
+                log.warn("Markdown 文档解析后没有找到任何章节: documentId={}", documentId);
+                return;
+            }
+
+            LocalDateTime now = LocalDateTime.now();
+            int chunkCount = 0;
+
+            for (MarkdownParserService.MarkdownSection section : sections) {
+                String title = section.getTitle();
+                String content = section.getContent();
+
+                if (!StringUtils.hasText(title)) {
+                    continue;
+                }
+
+                float[] embedding = ragService.embed(title);
+
+                ChunkBgeM3 chunk = ChunkBgeM3.builder()
+                        .kbId(kbId)
+                        .docId(documentId)
+                        .content(content != null ? content : "")
+                        .metadata("{\"title\":\"" + escapeJson(title) + "\",\"filename\":\"" + escapeJson(originalFilename) + "\"}")
+                        .embedding(embedding)
+                        .createdAt(now)
+                        .updatedAt(now)
+                        .build();
+
+                int result = chunkBgeM3Mapper.insert(chunk);
+
+                if (result > 0) {
+                    chunkCount++;
+                    log.debug("创建 chunk 成功: title={}, chunkId={}", title, chunk.getId());
+                } else {
+                    log.warn("创建 chunk 失败: title={}", title);
+                }
+            }
+            log.info("Markdown 文档处理完成: documentId={}, 共生成 {} 个 chunks", documentId, chunkCount);
+        } catch (IOException e) {
+            throw new BizException("读取 Markdown 内容失败: " + e.getMessage());
+        }
+    }
+
+    private String ensureMarkdownHasTitle(String markdown, String originalFilename) {
+        if (!StringUtils.hasText(markdown)) {
+            return "";
+        }
+        boolean hasHeading = markdown.lines().anyMatch(line -> line.trim().startsWith("#"));
+        if (hasHeading) {
+            return markdown;
+        }
+        String title = StringUtils.hasText(originalFilename) ? originalFilename : "未命名文档";
+        return "# " + title + "\n\n" + markdown;
+    }
+
+    private String buildConvertedMarkdownFilename(String originalFilename) {
+        String baseName = StringUtils.hasText(originalFilename) ? originalFilename : "converted";
+        int dotIndex = baseName.lastIndexOf('.');
+        if (dotIndex > 0) {
+            baseName = baseName.substring(0, dotIndex);
+        }
+        return baseName.replaceAll("[\\\\/:*?\"<>|]", "_") + ".converted.md";
+    }
+
+    private void updateDocumentMetadata(DocumentDTO documentDTO) {
+        try {
+            Document updatedDocument = documentConverter.toEntity(documentDTO);
+            updatedDocument.setId(documentDTO.getId());
+            updatedDocument.setCreatedAt(documentDTO.getCreatedAt());
+            updatedDocument.setUpdatedAt(LocalDateTime.now());
+            documentMapper.updateById(updatedDocument);
+        } catch (JsonProcessingException e) {
+            throw new BizException("更新文档转换状态失败: " + e.getMessage());
         }
     }
 
@@ -272,7 +352,14 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
         if (filename == null || !filename.contains(".")) {
             return "unknown";
         }
-        return filename.substring(filename.lastIndexOf(".") + 1).toLowerCase();
+        return filename.substring(filename.lastIndexOf(".") + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private String escapeJson(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     @Override

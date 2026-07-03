@@ -1,5 +1,6 @@
 package com.kama.jchatmind.model.vo;
 
+import com.kama.jchatmind.model.dto.DocumentDTO;
 import lombok.Builder;
 import lombok.Data;
 
@@ -11,5 +12,5 @@ public class DocumentVO {
     private String filename;
     private String filetype;
     private Long size;
+    private DocumentDTO.MetaData metadata;
 }
-

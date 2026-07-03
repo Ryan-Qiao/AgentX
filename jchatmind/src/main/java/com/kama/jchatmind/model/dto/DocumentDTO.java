@@ -27,5 +27,10 @@ public class DocumentDTO {
     @Data
     public static class MetaData {
         private String filePath; // 文件存储路径
+        private String markdownPath; // 转换后的 Markdown 文件路径
+        private String originalFileType;
+        private String conversionTool;
+        private String conversionStatus;
+        private String conversionError;
     }
 }
