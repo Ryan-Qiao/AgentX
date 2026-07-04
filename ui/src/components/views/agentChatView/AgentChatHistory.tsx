@@ -2,13 +2,12 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Bubble } from "@ant-design/x";
 import XMarkdown from "@ant-design/x-markdown";
 import {
-  ToolOutlined,
   CheckCircleOutlined,
   RobotOutlined,
   DownOutlined,
   RightOutlined,
 } from "@ant-design/icons";
-import type { ChatMessageVO, SseMessageType, ToolCall, ToolResponse } from "../../../types";
+import type { ChatMessageVO, SseMessageType, ToolResponse } from "../../../types";
 
 interface AgentChatHistoryProps {
   messages: ChatMessageVO[];
@@ -19,32 +18,13 @@ interface AgentChatHistoryProps {
   agentStatusType?: SseMessageType;
 }
 
-const ToolCallDisplay: React.FC<{ toolCall: ToolCall }> = ({ toolCall }) => {
-  let parsedArgs: Record<string, unknown> = {};
-  try {
-    parsedArgs = JSON.parse(toolCall.arguments) as Record<string, unknown>;
-  } catch {
-    // ignore parse errors
-  }
-
-  const argCount = Object.keys(parsedArgs).length;
-  const argPreview = argCount > 0 
-    ? Object.keys(parsedArgs).slice(0, 2).join(", ") + (argCount > 2 ? "..." : "")
-    : toolCall.arguments.slice(0, 50) + (toolCall.arguments.length > 50 ? "..." : "");
-
-  return (
-    <div className="text-xs text-zinc-500 flex items-center gap-1.5">
-      <ToolOutlined className="text-indigo-400" />
-      <span className="font-mono text-indigo-500">{toolCall.name}</span>
-      {argPreview && (
-        <>
-          <span className="text-zinc-300">·</span>
-          <span className="text-zinc-400 truncate max-w-[200px]">{argPreview}</span>
-        </>
-      )}
-    </div>
-  );
-};
+const stripDsmlToolCalls = (content: string) =>
+  content
+    .replace(
+      /<[｜|]\s*[｜|]DSML[｜|]\s*[｜|]tool_calls>[\s\S]*?<\/[｜|]\s*[｜|]DSML[｜|]\s*[｜|]tool_calls>/g,
+      "",
+    )
+    .trim();
 
 const ToolResponseDisplay: React.FC<{ toolResponse: ToolResponse }> = ({
   toolResponse,
@@ -209,29 +189,22 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
       className="flex-1 px-8 pt-4 overflow-y-scroll"
     >
       {messages.map((message) => {
+        const visibleAssistantContent =
+          message.role === "assistant" ? stripDsmlToolCalls(message.content ?? "") : "";
+
         return (
           <div className="mb-4" key={message.id}>
-            {message.role === "assistant" && (
+            {message.role === "assistant" && Boolean(visibleAssistantContent) && (
               <Bubble
                 content={
                   <div className="w-full">
-                    {message.metadata?.toolCalls &&
-                      message.metadata.toolCalls.length > 0 && (
-                        <div className="mb-2 flex flex-wrap gap-2">
-                          {message.metadata.toolCalls.map((toolCall) => (
-                            <ToolCallDisplay key={toolCall.id} toolCall={toolCall} />
-                          ))}
-                        </div>
-                      )}
-                    {message.content && (
-                      <div>
-                        <XMarkdown
-                          streaming={{ enableAnimation: false, hasNextChunk: true }}
-                        >
-                          {message.content}
-                        </XMarkdown>
-                      </div>
-                    )}
+                    <div>
+                      <XMarkdown
+                        streaming={{ enableAnimation: false, hasNextChunk: true }}
+                      >
+                        {visibleAssistantContent}
+                      </XMarkdown>
+                    </div>
                   </div>
                 }
                 placement="start"

@@ -33,6 +33,7 @@ import org.springframework.util.StringUtils;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 
 @Component
 public class JChatMindFactory {
@@ -40,6 +41,8 @@ public class JChatMindFactory {
     private static final Logger log = LoggerFactory.getLogger(JChatMindFactory.class);
     private static final int MAX_AGENT_CORE_MEMORIES = 10;
     private static final int MAX_USER_MEMORIES = 10;
+    private static final Pattern DSML_TOOL_CALLS_PATTERN = Pattern.compile(
+            "(?s)<[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]tool_calls>.*?</[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]tool_calls>");
     private final ChatClientRegistry chatClientRegistry;
     private final SseService sseService;
     private final AgentMapper agentMapper;
@@ -82,6 +85,13 @@ public class JChatMindFactory {
         return agentMapper.selectById(agentId);
     }
 
+    private String stripDsmlToolCalls(String text) {
+        if (!StringUtils.hasText(text)) {
+            return text;
+        }
+        return DSML_TOOL_CALLS_PATTERN.matcher(text).replaceAll("").trim();
+    }
+
     /**
      * 将数据库中存储的记忆恢复成 List<Message> 结构
      */
@@ -89,28 +99,53 @@ public class JChatMindFactory {
         int messageLength = Math.max(2, agentConfig.getChatOptions().getMessageLength());
         List<ChatMessageDTO> chatMessages = chatMessageFacadeService.getChatMessagesBySessionIdRecently(chatSessionId, messageLength);
         List<Message> memory = new ArrayList<>();
+        Set<String> pendingToolCallIds = new HashSet<>();
         for (ChatMessageDTO chatMessageDTO : chatMessages) {
             switch (chatMessageDTO.getRole()) {
                 case SYSTEM:
                     if (!StringUtils.hasLength(chatMessageDTO.getContent())) continue;
                     memory.add(0, new SystemMessage(chatMessageDTO.getContent()));
+                    pendingToolCallIds.clear();
                     break;
                 case USER:
                     if (!StringUtils.hasLength(chatMessageDTO.getContent())) continue;
                     memory.add(new UserMessage(chatMessageDTO.getContent()));
+                    pendingToolCallIds.clear();
                     break;
                 case ASSISTANT:
+                    String assistantContent = stripDsmlToolCalls(chatMessageDTO.getContent());
+                    List<AssistantMessage.ToolCall> toolCalls = chatMessageDTO.getMetadata() == null
+                            ? Collections.emptyList()
+                            : chatMessageDTO.getMetadata().getToolCalls();
+                    if (!StringUtils.hasText(assistantContent) && (toolCalls == null || toolCalls.isEmpty())) {
+                        continue;
+                    }
                     memory.add(AssistantMessage.builder()
-                            .content(chatMessageDTO.getContent())
-                            .toolCalls(chatMessageDTO.getMetadata()
-                                    .getToolCalls())
+                            .content(assistantContent)
+                            .toolCalls(toolCalls)
                             .build());
+                    pendingToolCallIds.clear();
+                    if (toolCalls != null && !toolCalls.isEmpty()) {
+                        pendingToolCallIds.addAll(toolCalls.stream()
+                                .map(AssistantMessage.ToolCall::id)
+                                .collect(Collectors.toSet()));
+                    }
                     break;
                 case TOOL:
+                    if (chatMessageDTO.getMetadata() == null
+                            || chatMessageDTO.getMetadata().getToolResponse() == null) {
+                        continue;
+                    }
+                    ToolResponseMessage.ToolResponse toolResponse = chatMessageDTO
+                            .getMetadata()
+                            .getToolResponse();
+                    if (!pendingToolCallIds.remove(toolResponse.id())) {
+                        log.warn("Skip orphan tool response in memory: sessionId={}, messageId={}, toolCallId={}",
+                                chatSessionId, chatMessageDTO.getId(), toolResponse.id());
+                        continue;
+                    }
                     memory.add(ToolResponseMessage.builder()
-                            .responses(List.of(chatMessageDTO
-                                    .getMetadata()
-                                    .getToolResponse()))
+                            .responses(List.of(toolResponse))
                             .build());
                     break;
                 default:
@@ -161,11 +196,9 @@ public class JChatMindFactory {
     ) {
         // 固定工具（系统强制）
         boolean hasKnowledgeBases = knowledgeBases != null && !knowledgeBases.isEmpty();
-        String latestUserMessage = latestUserMessage(memory);
         List<Tool> runtimeTools = toolFacadeService.getFixedTools()
                 .stream()
                 .filter(tool -> hasKnowledgeBases || !"KnowledgeTool".equals(tool.getName()))
-                .filter(tool -> shouldExposeFixedTool(tool, latestUserMessage))
                 .collect(Collectors.toCollection(ArrayList::new));
 
         // 可选工具（按 Agent 配置）
@@ -185,64 +218,6 @@ public class JChatMindFactory {
             }
         }
         return runtimeTools;
-    }
-
-    private boolean shouldExposeFixedTool(Tool tool, String latestUserMessage) {
-        return switch (tool.getName()) {
-            case "cityTool" -> asksCurrentLocation(latestUserMessage) || asksWeather(latestUserMessage);
-            case "dateTool" -> asksCurrentDate(latestUserMessage) || asksWeather(latestUserMessage);
-            case "weatherTool" -> asksWeather(latestUserMessage);
-            default -> true;
-        };
-    }
-
-    private String latestUserMessage(List<Message> memory) {
-        for (int i = memory.size() - 1; i >= 0; i--) {
-            Message message = memory.get(i);
-            if (message instanceof UserMessage userMessage) {
-                return userMessage.getText();
-            }
-        }
-        return "";
-    }
-
-    private boolean asksWeather(String message) {
-        if (!StringUtils.hasLength(message)) {
-            return false;
-        }
-        return message.contains("天气")
-                || message.contains("气温")
-                || message.contains("温度")
-                || message.contains("降水")
-                || message.contains("下雨")
-                || message.contains("雨")
-                || message.contains("出行");
-    }
-
-    private boolean asksCurrentDate(String message) {
-        if (!StringUtils.hasLength(message)) {
-            return false;
-        }
-        return message.contains("今天几号")
-                || message.contains("今天日期")
-                || message.contains("当前日期")
-                || message.contains("现在日期")
-                || message.contains("今天是几号")
-                || message.contains("今天多少号")
-                || message.contains("今天是几月几号")
-                || message.contains("今天几月几号")
-                || message.contains("现在几号")
-                || message.contains("当前几号");
-    }
-
-    private boolean asksCurrentLocation(String message) {
-        if (!StringUtils.hasLength(message)) {
-            return false;
-        }
-        return message.contains("当前城市")
-                || message.contains("当前位置")
-                || message.contains("我在哪")
-                || message.contains("所在城市");
     }
 
     private List<ToolCallback> buildToolCallbacks(List<Tool> runtimeTools) {

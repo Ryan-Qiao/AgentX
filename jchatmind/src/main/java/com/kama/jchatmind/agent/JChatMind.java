@@ -13,6 +13,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.messages.*;
+import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -27,9 +28,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 public class JChatMind {
@@ -74,6 +79,15 @@ public class JChatMind {
     private static final Integer EMPTY_RESPONSE_MAX_RETRIES = 1;
 
     private static final String EMPTY_RESPONSE_FALLBACK = "模型本次返回了空内容，请再试一次。";
+
+    private static final Pattern DSML_TOOL_CALLS_PATTERN = Pattern.compile(
+            "(?s)<[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]tool_calls>.*?</[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]tool_calls>");
+
+    private static final Pattern DSML_INVOKE_PATTERN = Pattern.compile(
+            "(?s)<[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]invoke\\s+name=\"([^\"]+)\">(.*?)</[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]invoke>");
+
+    private static final Pattern DSML_PARAMETER_PATTERN = Pattern.compile(
+            "(?s)<[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]parameter\\s+name=\"([^\"]+)\">(.*?)</[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]parameter>");
 
     // SpringAI 自带的 ChatOptions, 不是 AgentDTO.ChatOptions
     private ChatOptions chatOptions;
@@ -206,6 +220,108 @@ public class JChatMind {
                 .content(EMPTY_RESPONSE_FALLBACK)
                 .toolCalls(Collections.emptyList())
                 .build();
+    }
+
+    private String stripDsmlToolCalls(String text) {
+        if (!StringUtils.hasText(text)) {
+            return text;
+        }
+        return DSML_TOOL_CALLS_PATTERN.matcher(text).replaceAll("").trim();
+    }
+
+    private List<AssistantMessage.ToolCall> parseDsmlToolCalls(String text) {
+        if (!StringUtils.hasText(text)) {
+            return Collections.emptyList();
+        }
+
+        Matcher toolCallsMatcher = DSML_TOOL_CALLS_PATTERN.matcher(text);
+        if (!toolCallsMatcher.find()) {
+            return Collections.emptyList();
+        }
+
+        List<AssistantMessage.ToolCall> parsedToolCalls = new ArrayList<>();
+        toolCallsMatcher.reset();
+        while (toolCallsMatcher.find()) {
+            String toolCallsBlock = toolCallsMatcher.group();
+            Matcher invokeMatcher = DSML_INVOKE_PATTERN.matcher(toolCallsBlock);
+            while (invokeMatcher.find()) {
+                String toolName = invokeMatcher.group(1);
+                String invokeBody = invokeMatcher.group(2);
+                parsedToolCalls.add(new AssistantMessage.ToolCall(
+                        "dsml_call_" + UUID.randomUUID().toString().replace("-", ""),
+                        "function",
+                        toolName,
+                        parseDsmlArguments(invokeBody)
+                ));
+            }
+        }
+        return parsedToolCalls;
+    }
+
+    private String parseDsmlArguments(String invokeBody) {
+        if (!StringUtils.hasText(invokeBody)) {
+            return "{}";
+        }
+
+        Matcher parameterMatcher = DSML_PARAMETER_PATTERN.matcher(invokeBody);
+        Map<String, String> arguments = parameterMatcher.results()
+                .collect(Collectors.toMap(
+                        match -> match.group(1),
+                        match -> match.group(2).trim(),
+                        (first, second) -> second
+                ));
+
+        if (arguments.isEmpty()) {
+            return "{}";
+        }
+
+        return arguments.entrySet().stream()
+                .map(entry -> jsonQuote(entry.getKey()) + ":" + jsonQuote(entry.getValue()))
+                .collect(Collectors.joining(",", "{", "}"));
+    }
+
+    private String jsonQuote(String value) {
+        String text = value == null ? "" : value;
+        return "\"" + text
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\b", "\\b")
+                .replace("\f", "\\f")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t") + "\"";
+    }
+
+    private AssistantMessage normalizeDsmlToolCalls(AssistantMessage output) {
+        if (output.hasToolCalls()) {
+            return output;
+        }
+
+        List<AssistantMessage.ToolCall> parsedToolCalls = parseDsmlToolCalls(output.getText());
+        if (parsedToolCalls.isEmpty()) {
+            return output;
+        }
+
+        String cleanedContent = stripDsmlToolCalls(output.getText());
+        log.warn("Parsed DSML tool calls from assistant text: agentId={}, chatSessionId={}, tools={}",
+                this.agentId,
+                this.chatSessionId,
+                parsedToolCalls.stream().map(AssistantMessage.ToolCall::name).toList());
+
+        return AssistantMessage.builder()
+                .content(cleanedContent)
+                .properties(output.getMetadata())
+                .media(output.getMedia())
+                .toolCalls(parsedToolCalls)
+                .build();
+    }
+
+    private void replaceLastChatResponseOutput(AssistantMessage output) {
+        Assert.notNull(this.lastChatResponse, "Last chat client response cannot be null");
+        this.lastChatResponse = new ChatResponse(
+                List.of(new Generation(output, this.lastChatResponse.getResult().getMetadata())),
+                this.lastChatResponse.getMetadata()
+        );
     }
 
     // 持久化 Message, 返回 chatMessageId
@@ -410,6 +526,8 @@ public class JChatMind {
             output = this.lastChatResponse
                     .getResult()
                     .getOutput();
+            output = normalizeDsmlToolCalls(output);
+            replaceLastChatResponseOutput(output);
 
             toolCalls = output.getToolCalls();
             executableToolCalls = executableToolCalls(toolCalls);
