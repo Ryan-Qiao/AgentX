@@ -203,9 +203,12 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
                   <label className="block text-gray-700 font-medium mb-1">
                     名称
                   </label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    名称是这个 Agent 的基础身份。比如“老王”“Java 面试官”“产品顾问”，对话中它会以这个身份回应。
+                  </p>
                   <div className="flex items-center">
                     <Input
-                      placeholder="请输入智能体名称"
+                      placeholder="请输入 Agent 身份名称"
                       value={formData.name}
                       onChange={(e) =>
                         setFormData({ ...formData, name: e.target.value })
@@ -228,10 +231,13 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
                 </div>
                 <div className="mb-3">
                   <label className="block text-gray-700 font-medium mb-1">
-                    提示词
+                    系统提示词
                   </label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    系统提示词用于补充身份细节、背景信息、行为约束、输出风格和任务边界；不填写时仅使用上方名称作为基础身份。
+                  </p>
                   <TextArea
-                    placeholder="默认提示词"
+                    placeholder="例如：你回答要简洁，不说脏话；你熟悉 Java 后端面试；用户正在准备校招。"
                     rows={11}
                     value={formData.systemPrompt}
                     onChange={(e) =>

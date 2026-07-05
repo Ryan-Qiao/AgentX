@@ -433,71 +433,135 @@ public class JChatMind {
         }
     }
 
-    private boolean think() {
-        // 这里是运行时控制规则，不能覆盖 Agent 自身的角色设定。
-        String systemPromptText;
-        String agentRolePrompt = StringUtils.hasText(this.systemPrompt)
-                ? this.systemPrompt
-                : "你是名为「%s」的通用智能体助手。除非当前 Agent 角色设定明确要求，否则不要声称自己是某个专业角色、教练、面试官或业务专家。".formatted(this.name);
-        String runtimePolicy = """
+    private String renderAgentIdentityPrompt() {
+        String agentName = StringUtils.hasText(this.name) ? this.name : "未命名 Agent";
+        return """
 
-                【上下文权限顺序】
-                1. 当前 Agent 角色设定：唯一决定你是谁、你的身份、角色、口吻和任务边界。
+                【当前 Agent 身份】
+                名称：%s
+                - 当前 Agent 名称是你在本系统中的基础身份。
+                - 当用户询问你是谁、你的名字或当前身份时，应以该名称回答。
+                """.formatted(agentName);
+    }
+
+    private String renderAgentSystemInstructionPrompt() {
+        if (StringUtils.hasText(this.systemPrompt)) {
+            return """
+
+                    【当前 Agent 系统指令】
+                    %s
+                    """.formatted(this.systemPrompt);
+        }
+        return """
+
+                【当前 Agent 系统指令】
+                当前 Agent 未配置额外系统指令。请以当前 Agent 身份为基础，根据用户问题和可用上下文提供帮助。
+                """;
+    }
+
+    private String renderContextPriorityPrompt() {
+        return """
+
+                【上下文优先级】
+                1. 当前 Agent 身份和系统指令：决定你是谁、行为约束、语气、任务边界和输出要求。
                 2. 当前用户消息和当前会话历史：决定本轮要回答什么。
-                3. 当前 Agent 长期记忆：只服务于当前 Agent。
-                4. 用户长期记忆：只描述用户，不能描述你是谁，不能作为你的角色设定。
+                3. 当前 Agent 长期记忆：只服务于当前 Agent，不能覆盖当前 Agent 身份和系统指令。
+                4. 用户长期记忆：只描述用户，不能定义或修改当前 Agent 的身份和系统指令。
+                """;
+    }
 
-                【当前 Agent 角色设定】
+    private String renderToolPolicyPrompt() {
+        return """
+
+                【工具使用原则】
+                - 只有当工具能显著提升回答准确性，或用户明确要求实时信息、外部信息、数据库查询、知识库检索等能力时，才调用工具。
+                - 不要为了普通闲聊、写作、解释概念、总结改写等任务调用无关工具。
+                - 不要调用【当前可用工具】目录之外的工具。
+                - 工具结果已经足够回答用户时，应停止继续调用工具并给出最终回答。
+                """;
+    }
+
+    private String renderToolCatalogPrompt() {
+        if (this.availableTools == null || this.availableTools.isEmpty()) {
+            return """
+
+                    【当前可用工具】
+                    当前没有可调用工具。
+                    """;
+        }
+
+        String toolItems = this.availableTools.stream()
+                .map(ToolCallback::getToolDefinition)
+                .collect(Collectors.toMap(
+                        definition -> definition.name(),
+                        definition -> StringUtils.hasText(definition.description())
+                                ? definition.description()
+                                : "未提供工具描述。",
+                        (first, second) -> first
+                ))
+                .entrySet()
+                .stream()
+                .map(entry -> "- %s：%s".formatted(entry.getKey(), entry.getValue()))
+                .collect(Collectors.joining("\n"));
+
+        return """
+
+                【当前可用工具】
+                %s
+                """.formatted(toolItems);
+    }
+
+    private String renderKnowledgeBasePrompt() {
+        if (this.availableKbs == null || this.availableKbs.isEmpty()) {
+            return "";
+        }
+        return """
+
+                【当前可用知识库】
                 %s
 
-                【Agent 角色规则】
-                - 你必须始终遵守当前 Agent 的系统提示词和角色设定。
-                - 如果当前 Agent 没有系统提示词，你就是名为「%s」的通用智能体助手。
-                - 不允许从用户长期记忆中推断自己的身份。例如用户记忆里出现“科目二”，你也不能自称“科目二教练”，除非当前 Agent 角色设定明确写了这个身份。
-                - 不要把自己称为“决策模块”“工具调度模块”“内部模块”。
-                - 当用户询问“你是谁”或类似问题时，应按当前 Agent 的角色回答。
-                - 对“你好”“你是谁”“你能做什么”等寒暄或身份问题，禁止主动引用用户长期记忆。
-                - 以下规则只用于内部判断下一步动作，不能作为对用户暴露的身份。
-                """.formatted(agentRolePrompt, this.name);
-        String toolUsePolicy = """
+                【知识库使用规则】
+                - 如果回答需要当前知识库中的信息，优先调用 KnowledgeTool 检索。
+                - 调用 KnowledgeTool 时，kbsId 必须从当前可用知识库列表中选择真实 UUID。
+                - 禁止编造 default、默认知识库、unknown 等不存在的知识库 ID。
+                """.formatted(this.availableKbs);
+    }
 
-                【工具使用规则】
-                - 只有当用户明确要求实时信息、当前城市、当前日期、天气、数据库查询或知识库检索时，才调用对应工具。
-                - 用户要求写文章、写报告、写提纲、改写、总结、解释概念、普通闲聊时，直接回答，不要为了补充背景擅自调用 getCity、getDate 或 weather。
-                - weather 只用于天气查询；不要在城市介绍、城市报告、旅游文案等普通写作任务中调用 weather。
-                - getCity 只用于查询用户当前位置；不要把它当作文章主题城市，也不要用当前位置替代用户明确指定的城市。
-                - getDate 只用于用户询问当前日期，或天气等确实需要日期参数的工具链。
+    private String renderEndingRulePrompt() {
+        return """
+
+                【结束规则】
+                - 如果当前上下文中的工具结果已经足够回答用户，请直接给用户最终回答，不要再调用工具。
+                - 最终回答必须面向用户总结工具返回的信息，不能只说明“已完成”。
                 """;
-        String memoryPrompt = StringUtils.hasLength(this.agentMemoryPrompt) ? this.agentMemoryPrompt : "";
+    }
 
-        if (this.availableKbs != null && !this.availableKbs.isEmpty()) {
-            systemPromptText = """
-                    请根据当前对话上下文，在保持当前 Agent 角色的前提下决定下一步动作。
-                    %s
-                    %s
-                    %s
+    private String buildSystemPromptText() {
+        String memoryPrompt = StringUtils.hasText(this.agentMemoryPrompt) ? this.agentMemoryPrompt : "";
+        return """
+                请根据当前对话上下文决定下一步动作，并保持当前 Agent 的身份、系统指令和任务边界。
+                %s
+                %s
+                %s
+                %s
+                %s
+                %s
+                %s
+                %s
+                """.formatted(
+                renderAgentIdentityPrompt(),
+                renderAgentSystemInstructionPrompt(),
+                renderContextPriorityPrompt(),
+                memoryPrompt,
+                renderToolPolicyPrompt(),
+                renderToolCatalogPrompt(),
+                renderKnowledgeBasePrompt(),
+                renderEndingRulePrompt()
+        );
+    }
 
-                    【结束规则】
-                    - 如果当前上下文中的工具结果已经足够回答用户，请直接给用户最终回答，不要再调用工具。
-                    - 最终回答必须面向用户总结工具返回的信息，不能只说明“已完成”。
-
-                    【额外信息】
-                    - 你目前拥有的知识库列表以及描述：%s
-                    - 如果有缺失的上下文时，优先从知识库中进行搜索
-                    - 调用 KnowledgeTool 时，kbsId 必须从上面的知识库列表中选择真实 UUID，禁止编造 default、默认知识库、unknown 等不存在的 ID
-                    """.formatted(runtimePolicy, toolUsePolicy, memoryPrompt, this.availableKbs);
-        } else {
-            systemPromptText = """
-                    请根据当前对话上下文，在保持当前 Agent 角色的前提下决定下一步动作。
-                    %s
-                    %s
-                    %s
-
-                    【结束规则】
-                    - 如果当前上下文中的工具结果已经足够回答用户，请直接给用户最终回答，不要再调用工具。
-                    - 最终回答必须面向用户总结工具返回的信息，不能只说明“已完成”。
-                    """.formatted(runtimePolicy, toolUsePolicy, memoryPrompt);
-        }
+    private boolean think() {
+        String systemPromptText = buildSystemPromptText();
 
         Prompt prompt = Prompt.builder()
                 .chatOptions(this.chatOptions)
