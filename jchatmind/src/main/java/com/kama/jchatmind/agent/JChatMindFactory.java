@@ -1,6 +1,7 @@
 package com.kama.jchatmind.agent;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.kama.jchatmind.agent.tools.KnowledgeTools;
 import com.kama.jchatmind.agent.tools.Tool;
 import com.kama.jchatmind.config.ChatClientRegistry;
 import com.kama.jchatmind.converter.AgentConverter;
@@ -199,6 +200,7 @@ public class JChatMindFactory {
         List<Tool> runtimeTools = toolFacadeService.getFixedTools()
                 .stream()
                 .filter(tool -> hasKnowledgeBases || !"KnowledgeTool".equals(tool.getName()))
+                .map(tool -> scopeKnowledgeTool(tool, knowledgeBases))
                 .collect(Collectors.toCollection(ArrayList::new));
 
         // 可选工具（按 Agent 配置）
@@ -218,6 +220,13 @@ public class JChatMindFactory {
             }
         }
         return runtimeTools;
+    }
+
+    private Tool scopeKnowledgeTool(Tool tool, List<KnowledgeBaseDTO> knowledgeBases) {
+        if (tool instanceof KnowledgeTools knowledgeTools) {
+            return knowledgeTools.scopedTo(knowledgeBases);
+        }
+        return tool;
     }
 
     private List<ToolCallback> buildToolCallbacks(List<Tool> runtimeTools) {
