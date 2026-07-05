@@ -9,6 +9,17 @@ import {
 } from "@ant-design/icons";
 import type { ChatMessageVO, SseMessageType, ToolResponse } from "../../../types";
 
+interface KnowledgeHit {
+  rank: number;
+  documentTitle: string;
+  documentId: string;
+  chunkId: string;
+  distance: string;
+  score: string;
+  rerankScore: string;
+  content: string;
+}
+
 interface AgentChatHistoryProps {
   messages: ChatMessageVO[];
   streamingContent?: string;
@@ -26,6 +37,21 @@ const stripDsmlToolCalls = (content: string) =>
     )
     .trim();
 
+const parseKnowledgeToolResponse = (responseData: string): KnowledgeHit[] => {
+  const pattern =
+    /\[(\d+)\] 文档：(.+?)\ndocumentId：(.+?)\nchunkId：(.+?)\ndistance：(.+?)\nscore：(.+?)\nrerankScore：(.+?)\n内容：\n([\s\S]*?)(?=\n\n\[\d+\] 文档：|\n\n使用规则：|$)/g;
+  return Array.from(responseData.matchAll(pattern)).map((match) => ({
+    rank: Number(match[1]),
+    documentTitle: match[2].trim(),
+    documentId: match[3].trim(),
+    chunkId: match[4].trim(),
+    distance: match[5].trim(),
+    score: match[6].trim(),
+    rerankScore: match[7].trim(),
+    content: match[8].trim(),
+  }));
+};
+
 const ToolResponseDisplay: React.FC<{ toolResponse: ToolResponse }> = ({
   toolResponse,
 }) => {
@@ -34,6 +60,10 @@ const ToolResponseDisplay: React.FC<{ toolResponse: ToolResponse }> = ({
   let parsedData: unknown = null;
   let isJson = false;
   let dataPreview = "";
+  const knowledgeHits =
+    toolResponse.name === "KnowledgeTool"
+      ? parseKnowledgeToolResponse(toolResponse.responseData)
+      : [];
   
   try {
     parsedData = JSON.parse(toolResponse.responseData);
@@ -41,9 +71,15 @@ const ToolResponseDisplay: React.FC<{ toolResponse: ToolResponse }> = ({
     const jsonStr = JSON.stringify(parsedData);
     dataPreview = jsonStr.length > 100 ? jsonStr.slice(0, 100) + "..." : jsonStr;
   } catch {
-    dataPreview = toolResponse.responseData.length > 100 
-      ? toolResponse.responseData.slice(0, 100) + "..." 
-      : toolResponse.responseData;
+    if (knowledgeHits.length > 0) {
+      dataPreview = `命中 ${knowledgeHits.length} 个片段：${knowledgeHits
+        .map((hit) => hit.documentTitle)
+        .join("、")}`;
+    } else {
+      dataPreview = toolResponse.responseData.length > 100 
+        ? toolResponse.responseData.slice(0, 100) + "..." 
+        : toolResponse.responseData;
+    }
   }
 
   return (
@@ -65,7 +101,30 @@ const ToolResponseDisplay: React.FC<{ toolResponse: ToolResponse }> = ({
       {expanded && (
         <div className="ml-5 mt-1.5 p-2 bg-zinc-50 rounded border border-zinc-200">
           <div className="text-xs text-zinc-600 font-mono">
-            {isJson ? (
+            {knowledgeHits.length > 0 ? (
+              <div className="space-y-2 font-sans">
+                {knowledgeHits.map((hit) => (
+                  <div
+                    key={`${hit.rank}-${hit.chunkId}`}
+                    className="rounded border border-zinc-200 bg-white p-2"
+                  >
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-zinc-700">
+                      <span className="font-semibold">[{hit.rank}] {hit.documentTitle}</span>
+                      <span className="text-zinc-300">·</span>
+                      <span>distance {hit.distance}</span>
+                      <span>score {hit.score}</span>
+                      <span>rerank {hit.rerankScore}</span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-zinc-400 break-all">
+                      {hit.chunkId}
+                    </div>
+                    <div className="mt-2 whitespace-pre-wrap break-words leading-relaxed text-zinc-600">
+                      {hit.content}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : isJson ? (
               <pre className="whitespace-pre-wrap break-words overflow-x-auto max-h-60 overflow-y-auto">
                 {JSON.stringify(parsedData, null, 2)}
               </pre>
