@@ -18,6 +18,8 @@ public class RagSearchResult {
     private String metadata;
     private Double distance;
     private Double score;
+    private Double lexicalScore;
+    private Double rerankScore;
     private Boolean filtered;
     private String filterReason;
     private Integer rank;

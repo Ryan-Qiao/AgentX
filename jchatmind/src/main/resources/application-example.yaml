@@ -54,3 +54,7 @@ rag:
     max-distance: ${RAG_RETRIEVAL_MAX_DISTANCE:}
     max-chunks-per-document: ${RAG_RETRIEVAL_MAX_CHUNKS_PER_DOCUMENT:2}
     debug-enabled: ${RAG_RETRIEVAL_DEBUG_ENABLED:true}
+  rerank:
+    enabled: ${RAG_RERANK_ENABLED:true}
+    vector-weight: ${RAG_RERANK_VECTOR_WEIGHT:0.70}
+    lexical-weight: ${RAG_RERANK_LEXICAL_WEIGHT:0.30}

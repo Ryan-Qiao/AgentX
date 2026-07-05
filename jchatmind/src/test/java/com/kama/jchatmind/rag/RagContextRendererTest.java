@@ -27,6 +27,7 @@ class RagContextRendererTest {
                                 .content("JChatMind RAG 使用知识库片段增强回答。")
                                 .distance(0.41234)
                                 .score(0.707)
+                                .rerankScore(0.812)
                                 .filtered(false)
                                 .build()
                 ))
@@ -38,6 +39,7 @@ class RagContextRendererTest {
         assertThat(rendered).contains("[1] 文档：rag.md");
         assertThat(rendered).contains("chunkId：chunk-1");
         assertThat(rendered).contains("distance：0.4123");
+        assertThat(rendered).contains("rerankScore：0.8120");
         assertThat(rendered).contains("请使用片段编号");
     }
 

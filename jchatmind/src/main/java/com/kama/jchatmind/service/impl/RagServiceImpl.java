@@ -3,6 +3,7 @@ package com.kama.jchatmind.service.impl;
 import com.kama.jchatmind.mapper.ChunkBgeM3Mapper;
 import com.kama.jchatmind.model.rag.RagSearchResponse;
 import com.kama.jchatmind.model.rag.RagSearchResult;
+import com.kama.jchatmind.rag.RagReranker;
 import com.kama.jchatmind.rag.RagRetrievalPolicy;
 import com.kama.jchatmind.service.RagService;
 import lombok.Data;
@@ -24,6 +25,7 @@ public class RagServiceImpl implements RagService {
     private final WebClient webClient;
     private final ChunkBgeM3Mapper chunkBgeM3Mapper;
     private final RagRetrievalPolicy ragRetrievalPolicy;
+    private final RagReranker ragReranker;
 
     @Value("${rag.retrieval.raw-top-k:10}")
     private int rawTopK;
@@ -40,14 +42,25 @@ public class RagServiceImpl implements RagService {
     @Value("${rag.retrieval.debug-enabled:true}")
     private boolean debugEnabled;
 
+    @Value("${rag.rerank.enabled:true}")
+    private boolean rerankEnabled;
+
+    @Value("${rag.rerank.vector-weight:0.70}")
+    private double vectorWeight;
+
+    @Value("${rag.rerank.lexical-weight:0.30}")
+    private double lexicalWeight;
+
     public RagServiceImpl(
             WebClient.Builder builder,
             ChunkBgeM3Mapper chunkBgeM3Mapper,
-            RagRetrievalPolicy ragRetrievalPolicy
+            RagRetrievalPolicy ragRetrievalPolicy,
+            RagReranker ragReranker
     ) {
         this.webClient = builder.baseUrl("http://localhost:11434").build();
         this.chunkBgeM3Mapper = chunkBgeM3Mapper;
         this.ragRetrievalPolicy = ragRetrievalPolicy;
+        this.ragReranker = ragReranker;
     }
 
     @Data
@@ -78,6 +91,9 @@ public class RagServiceImpl implements RagService {
     public RagSearchResponse search(String kbId, String query) {
         String queryEmbedding = toPgVector(doEmbed(query));
         List<RagSearchResult> rawResults = chunkBgeM3Mapper.similaritySearchDetailed(kbId, queryEmbedding, rawTopK);
+        if (rerankEnabled) {
+            rawResults = ragReranker.rerank(query, rawResults, vectorWeight, lexicalWeight);
+        }
         List<RagSearchResult> processedResults = ragRetrievalPolicy.apply(
                 rawResults,
                 finalTopK,
@@ -112,11 +128,14 @@ public class RagServiceImpl implements RagService {
         }
         String results = response.getResults()
                 .stream()
-                .map(result -> "chunkId=%s, documentId=%s, distance=%s, filtered=%s, filterReason=%s"
+                .map(result -> "chunkId=%s, documentId=%s, distance=%s, score=%s, lexicalScore=%s, rerankScore=%s, filtered=%s, filterReason=%s"
                         .formatted(
                                 result.getChunkId(),
                                 result.getDocumentId(),
                                 result.getDistance(),
+                                result.getScore(),
+                                result.getLexicalScore(),
+                                result.getRerankScore(),
                                 result.getFiltered(),
                                 result.getFilterReason()
                         ))
@@ -129,6 +148,7 @@ public class RagServiceImpl implements RagService {
                 rawTopK={}
                 finalTopK={}
                 maxDistance={}
+                rerankEnabled={}
                 results:
                 {}
                 ===================================
@@ -138,6 +158,7 @@ public class RagServiceImpl implements RagService {
                 response.getRawTopK(),
                 response.getFinalTopK(),
                 response.getMaxDistance(),
+                rerankEnabled,
                 results);
     }
 

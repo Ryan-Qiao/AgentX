@@ -51,6 +51,9 @@ public class RagContextRenderer {
         String score = result.getScore() == null
                 ? "unknown"
                 : String.format(Locale.ROOT, "%.4f", result.getScore());
+        String rerankScore = result.getRerankScore() == null
+                ? "unknown"
+                : String.format(Locale.ROOT, "%.4f", result.getRerankScore());
 
         return """
                 [%d] 文档：%s
@@ -58,6 +61,7 @@ public class RagContextRenderer {
                 chunkId：%s
                 distance：%s
                 score：%s
+                rerankScore：%s
                 内容：
                 %s
                 """.formatted(
@@ -67,6 +71,7 @@ public class RagContextRenderer {
                 chunkId,
                 distance,
                 score,
+                rerankScore,
                 result.getContent()
         ).trim();
     }
