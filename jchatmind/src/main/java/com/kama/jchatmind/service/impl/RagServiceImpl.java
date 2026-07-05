@@ -1,26 +1,53 @@
 package com.kama.jchatmind.service.impl;
 
 import com.kama.jchatmind.mapper.ChunkBgeM3Mapper;
-import com.kama.jchatmind.model.entity.ChunkBgeM3;
+import com.kama.jchatmind.model.rag.RagSearchResponse;
+import com.kama.jchatmind.model.rag.RagSearchResult;
+import com.kama.jchatmind.rag.RagRetrievalPolicy;
 import com.kama.jchatmind.service.RagService;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class RagServiceImpl implements RagService {
 
     // 封装本地的模型调用
     private final WebClient webClient;
     private final ChunkBgeM3Mapper chunkBgeM3Mapper;
+    private final RagRetrievalPolicy ragRetrievalPolicy;
 
-    public RagServiceImpl(WebClient.Builder builder, ChunkBgeM3Mapper chunkBgeM3Mapper) {
+    @Value("${rag.retrieval.raw-top-k:10}")
+    private int rawTopK;
+
+    @Value("${rag.retrieval.final-top-k:3}")
+    private int finalTopK;
+
+    @Value("${rag.retrieval.max-distance:}")
+    private Double maxDistance;
+
+    @Value("${rag.retrieval.max-chunks-per-document:2}")
+    private int maxChunksPerDocument;
+
+    @Value("${rag.retrieval.debug-enabled:true}")
+    private boolean debugEnabled;
+
+    public RagServiceImpl(
+            WebClient.Builder builder,
+            ChunkBgeM3Mapper chunkBgeM3Mapper,
+            RagRetrievalPolicy ragRetrievalPolicy
+    ) {
         this.webClient = builder.baseUrl("http://localhost:11434").build();
         this.chunkBgeM3Mapper = chunkBgeM3Mapper;
+        this.ragRetrievalPolicy = ragRetrievalPolicy;
     }
 
     @Data
@@ -48,10 +75,70 @@ public class RagServiceImpl implements RagService {
     }
 
     @Override
+    public RagSearchResponse search(String kbId, String query) {
+        String queryEmbedding = toPgVector(doEmbed(query));
+        List<RagSearchResult> rawResults = chunkBgeM3Mapper.similaritySearchDetailed(kbId, queryEmbedding, rawTopK);
+        List<RagSearchResult> processedResults = ragRetrievalPolicy.apply(
+                rawResults,
+                finalTopK,
+                maxDistance,
+                maxChunksPerDocument
+        );
+
+        RagSearchResponse response = RagSearchResponse.builder()
+                .knowledgeBaseId(kbId)
+                .query(query)
+                .rawTopK(rawTopK)
+                .finalTopK(finalTopK)
+                .maxDistance(maxDistance)
+                .results(processedResults)
+                .build();
+
+        logRetrieval(response);
+        return response;
+    }
+
+    @Override
     public List<String> similaritySearch(String kbId, String title) {
-        String queryEmbedding = toPgVector(doEmbed(title));
-        List<ChunkBgeM3> chunks = chunkBgeM3Mapper.similaritySearch(kbId, queryEmbedding, 3);
-        return chunks.stream().map(ChunkBgeM3::getContent).toList();
+        return search(kbId, title).selectedResults()
+                .stream()
+                .map(RagSearchResult::getContent)
+                .toList();
+    }
+
+    private void logRetrieval(RagSearchResponse response) {
+        if (!debugEnabled) {
+            return;
+        }
+        String results = response.getResults()
+                .stream()
+                .map(result -> "chunkId=%s, documentId=%s, distance=%s, filtered=%s, filterReason=%s"
+                        .formatted(
+                                result.getChunkId(),
+                                result.getDocumentId(),
+                                result.getDistance(),
+                                result.getFiltered(),
+                                result.getFilterReason()
+                        ))
+                .collect(Collectors.joining("\n"));
+        log.info("""
+
+                ========== RAG Retrieval ==========
+                kbId={}
+                query={}
+                rawTopK={}
+                finalTopK={}
+                maxDistance={}
+                results:
+                {}
+                ===================================
+                """,
+                response.getKnowledgeBaseId(),
+                response.getQuery(),
+                response.getRawTopK(),
+                response.getFinalTopK(),
+                response.getMaxDistance(),
+                results);
     }
 
     private String toPgVector(float[] v) {

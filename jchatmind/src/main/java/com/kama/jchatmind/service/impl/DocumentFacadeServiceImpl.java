@@ -1,6 +1,7 @@
 package com.kama.jchatmind.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kama.jchatmind.converter.DocumentConverter;
 import com.kama.jchatmind.exception.BizException;
 import com.kama.jchatmind.mapper.DocumentMapper;
@@ -32,8 +33,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 @AllArgsConstructor
@@ -47,6 +50,7 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
     private final MarkdownParserService markdownParserService;
     private final RagService ragService;
     private final ChunkBgeM3Mapper chunkBgeM3Mapper;
+    private final ObjectMapper objectMapper;
 
     @Override
     public GetDocumentsResponse getDocuments() {
@@ -248,7 +252,7 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
             metadata.setConversionError(null);
             updateDocumentMetadata(documentDTO);
 
-            processMarkdownContent(kbId, documentId, markdown, originalFilename);
+            processMarkdownContent(kbId, documentId, markdown, originalFilename, fileType);
         } catch (Exception e) {
             log.error("处理上传文档失败: documentId={}", documentId, e);
             DocumentDTO.MetaData metadata = documentDTO.getMetadata();
@@ -265,7 +269,13 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
     /**
      * 处理 Markdown 内容，解析并生成 chunks。
      */
-    private void processMarkdownContent(String kbId, String documentId, String markdown, String originalFilename) {
+    private void processMarkdownContent(
+            String kbId,
+            String documentId,
+            String markdown,
+            String originalFilename,
+            String sourceFileType
+    ) {
         try (InputStream inputStream = new ByteArrayInputStream(markdown.getBytes(StandardCharsets.UTF_8))) {
             List<MarkdownParserService.MarkdownSection> sections = markdownParserService.parseMarkdown(inputStream);
 
@@ -277,7 +287,8 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
             LocalDateTime now = LocalDateTime.now();
             int chunkCount = 0;
 
-            for (MarkdownParserService.MarkdownSection section : sections) {
+            for (int i = 0; i < sections.size(); i++) {
+                MarkdownParserService.MarkdownSection section = sections.get(i);
                 String title = section.getTitle();
                 String content = section.getContent();
 
@@ -285,13 +296,13 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
                     continue;
                 }
 
-                float[] embedding = ragService.embed(title);
+                float[] embedding = ragService.embed(buildChunkEmbeddingText(title, content));
 
                 ChunkBgeM3 chunk = ChunkBgeM3.builder()
                         .kbId(kbId)
                         .docId(documentId)
                         .content(content != null ? content : "")
-                        .metadata("{\"title\":\"" + escapeJson(title) + "\",\"filename\":\"" + escapeJson(originalFilename) + "\"}")
+                        .metadata(buildChunkMetadata(originalFilename, sourceFileType, title, i))
                         .embedding(embedding)
                         .createdAt(now)
                         .updatedAt(now)
@@ -309,6 +320,36 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
             log.info("Markdown 文档处理完成: documentId={}, 共生成 {} 个 chunks", documentId, chunkCount);
         } catch (IOException e) {
             throw new BizException("读取 Markdown 内容失败: " + e.getMessage());
+        }
+    }
+
+    private String buildChunkEmbeddingText(String title, String content) {
+        String normalizedContent = StringUtils.hasText(content) ? content : "";
+        return """
+                标题：%s
+
+                正文：
+                %s
+                """.formatted(title, normalizedContent).trim();
+    }
+
+    private String buildChunkMetadata(
+            String originalFilename,
+            String sourceFileType,
+            String sectionTitle,
+            int chunkIndex
+    ) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("documentTitle", originalFilename);
+        metadata.put("sectionTitle", sectionTitle);
+        metadata.put("headingPath", List.of(sectionTitle));
+        metadata.put("sourceFileType", sourceFileType);
+        metadata.put("originalFileName", originalFilename);
+        metadata.put("chunkIndex", chunkIndex);
+        try {
+            return objectMapper.writeValueAsString(metadata);
+        } catch (JsonProcessingException e) {
+            throw new BizException("构建 chunk metadata 失败: " + e.getMessage());
         }
     }
 
@@ -353,13 +394,6 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
             return "unknown";
         }
         return filename.substring(filename.lastIndexOf(".") + 1).toLowerCase(Locale.ROOT);
-    }
-
-    private String escapeJson(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     @Override

@@ -15,6 +15,17 @@
         <result property="updatedAt" column="updated_at" jdbcType="TIMESTAMP"/>
     </resultMap>
 
+    <resultMap id="RagSearchResultMap" type="com.kama.jchatmind.model.rag.RagSearchResult">
+        <id property="chunkId" column="chunk_id" jdbcType="VARCHAR"/>
+        <result property="knowledgeBaseId" column="kb_id" jdbcType="VARCHAR"/>
+        <result property="documentId" column="document_id" jdbcType="VARCHAR"/>
+        <result property="documentTitle" column="document_title" jdbcType="VARCHAR"/>
+        <result property="content" column="content" jdbcType="VARCHAR"/>
+        <result property="metadata" column="metadata" jdbcType="VARCHAR"/>
+        <result property="distance" column="distance" jdbcType="DOUBLE"/>
+        <result property="score" column="score" jdbcType="DOUBLE"/>
+    </resultMap>
+
     <sql id="Base_Column_List">
         id,kb_id,doc_id,
         content,metadata,embedding,
@@ -95,6 +106,24 @@
         FROM chunk_bge_m3
         WHERE kb_id = CAST(#{kbId} AS uuid)
         ORDER BY embedding <-> #{vectorLiteral}::vector
+        LIMIT #{limit}
+        ]]>
+    </select>
+
+    <select id="similaritySearchDetailed" resultMap="RagSearchResultMap">
+        <![CDATA[
+        SELECT c.id AS chunk_id,
+               c.kb_id,
+               c.doc_id AS document_id,
+               d.filename AS document_title,
+               c.content,
+               c.metadata,
+               c.embedding <-> #{vectorLiteral}::vector AS distance,
+               1.0 / (1.0 + (c.embedding <-> #{vectorLiteral}::vector)) AS score
+        FROM chunk_bge_m3 c
+        LEFT JOIN document d ON d.id = c.doc_id
+        WHERE c.kb_id = CAST(#{kbId} AS uuid)
+        ORDER BY c.embedding <-> #{vectorLiteral}::vector
         LIMIT #{limit}
         ]]>
     </select>

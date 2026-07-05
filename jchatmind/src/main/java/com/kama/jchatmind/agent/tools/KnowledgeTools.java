@@ -1,18 +1,21 @@
 package com.kama.jchatmind.agent.tools;
 
+import com.kama.jchatmind.model.rag.RagSearchResponse;
+import com.kama.jchatmind.rag.RagContextRenderer;
 import com.kama.jchatmind.service.RagService;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
 import java.util.UUID;
 
 @Component
 public class KnowledgeTools implements Tool {
 
     private final RagService ragService;
+    private final RagContextRenderer ragContextRenderer;
 
-    public KnowledgeTools(RagService ragService) {
+    public KnowledgeTools(RagService ragService, RagContextRenderer ragContextRenderer) {
         this.ragService = ragService;
+        this.ragContextRenderer = ragContextRenderer;
     }
 
     @Override
@@ -32,7 +35,7 @@ public class KnowledgeTools implements Tool {
 
     @org.springframework.ai.tool.annotation.Tool(
             name = "KnowledgeTool",
-            description = "从指定知识库中执行相似性检索（RAG）。参数为知识库 ID（kbsId）和查询文本（query），返回与查询最相关的知识片段。"
+            description = "从指定知识库中执行相似性检索（RAG）。参数为知识库 ID（kbsId）和查询文本（query），返回命中的知识片段、来源文档、chunkId、distance、score 和使用规则。"
     )
     public String knowledgeQuery(String kbsId, String query) {
         // 参数校验
@@ -51,7 +54,7 @@ public class KnowledgeTools implements Tool {
             return "错误：查询内容不能为空";
         }
 
-        List<String> strings = ragService.similaritySearch(kbsId, query);
-        return String.join("\n", strings);
+        RagSearchResponse response = ragService.search(kbsId, query.trim());
+        return ragContextRenderer.renderForTool(response);
     }
 }
