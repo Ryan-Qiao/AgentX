@@ -15,6 +15,7 @@ public class AgentMemoryDTO {
     private String memoryType;
     private String title;
     private String content;
+    private float[] embedding;
     private Integer priority;
     private Boolean enabled;
     private LocalDateTime createdAt;

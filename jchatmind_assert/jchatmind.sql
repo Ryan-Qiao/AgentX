@@ -50,6 +50,7 @@ CREATE TABLE agent_memory (
     memory_type TEXT NOT NULL DEFAULT 'fact', -- preference / fact / decision / issue / task / feedback
     title TEXT NOT NULL,
     content TEXT NOT NULL,
+    embedding VECTOR(1024),
     priority INT NOT NULL DEFAULT 0,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
 
@@ -60,6 +61,11 @@ CREATE TABLE agent_memory (
 
 CREATE INDEX idx_agent_memory_agent_enabled_priority
 ON agent_memory (agent_id, enabled, memory_scope, priority DESC, updated_at DESC);
+
+CREATE INDEX idx_agent_memory_embedding
+ON agent_memory
+USING ivfflat (embedding vector_l2_ops)
+WITH (lists = 100);
 
 CREATE TABLE user_memory (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

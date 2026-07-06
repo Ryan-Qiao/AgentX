@@ -41,6 +41,7 @@ public class JChatMindFactory {
 
     private static final Logger log = LoggerFactory.getLogger(JChatMindFactory.class);
     private static final int MAX_AGENT_CORE_MEMORIES = 10;
+    private static final int MAX_AGENT_RETRIEVED_MEMORIES = 5;
     private static final int MAX_USER_MEMORIES = 10;
     private static final Pattern DSML_TOOL_CALLS_PATTERN = Pattern.compile(
             "(?s)<[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]tool_calls>.*?</[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]tool_calls>");
@@ -253,13 +254,31 @@ public class JChatMindFactory {
         }
     }
 
-    private String renderMemoryPrompt(String agentId) {
+    private String latestUserText(List<Message> memory) {
+        if (memory == null || memory.isEmpty()) {
+            return "";
+        }
+        for (int i = memory.size() - 1; i >= 0; i--) {
+            Message message = memory.get(i);
+            if (message instanceof UserMessage && StringUtils.hasText(message.getText())) {
+                return message.getText();
+            }
+        }
+        return "";
+    }
+
+    private String renderMemoryPrompt(String agentId, String latestUserText) {
         List<UserMemoryDTO> userMemories = userMemoryFacadeService.getEnabledGlobalUserMemories(MAX_USER_MEMORIES);
-        List<AgentMemoryDTO> agentMemories = agentMemoryFacadeService.getEnabledAgentMemories(
+        List<AgentMemoryDTO> agentCoreMemories = agentMemoryFacadeService.getEnabledAgentMemories(
                 agentId,
                 MAX_AGENT_CORE_MEMORIES
         );
-        if (userMemories.isEmpty() && agentMemories.isEmpty()) {
+        List<AgentMemoryDTO> agentRetrievedMemories = agentMemoryFacadeService.getRetrievedAgentMemories(
+                agentId,
+                latestUserText,
+                MAX_AGENT_RETRIEVED_MEMORIES
+        );
+        if (userMemories.isEmpty() && agentCoreMemories.isEmpty() && agentRetrievedMemories.isEmpty()) {
             return "";
         }
 
@@ -286,27 +305,47 @@ public class JChatMindFactory {
                     """.formatted(userMemoryItems);
         }
 
-        String agentMemoryPrompt = "";
-        if (!agentMemories.isEmpty()) {
-            String agentMemoryItems = agentMemories.stream()
+        String agentCoreMemoryPrompt = "";
+        if (!agentCoreMemories.isEmpty()) {
+            String agentCoreMemoryItems = agentCoreMemories.stream()
                     .map(memory -> "- [%s] %s：%s".formatted(
                             StringUtils.hasText(memory.getMemoryType()) ? memory.getMemoryType() : "fact",
                             memory.getTitle(),
                             memory.getContent()
                     ))
                     .collect(Collectors.joining("\n"));
-            agentMemoryPrompt = """
+            agentCoreMemoryPrompt = """
 
-                    【当前 Agent 长期记忆】
-                    以下记忆只适用于当前 Agent，是跨会话保存的长期上下文。使用规则：
-                    - 可以参考这些记忆保持当前 Agent 的连续性。
+                    【当前 Agent 核心记忆】
+                    以下记忆只适用于当前 Agent，是跨会话保存的核心长期上下文。使用规则：
+                    - 可以参考这些记忆保持当前 Agent 的身份、任务边界和长期连续性。
                     - 如果记忆与用户最新输入冲突，以用户最新输入为准。
                     - 不要主动暴露“内部记忆”这个机制，除非用户询问。
                     %s
-                    """.formatted(agentMemoryItems);
+                    """.formatted(agentCoreMemoryItems);
         }
 
-        return userMemoryPrompt + agentMemoryPrompt;
+        String agentRetrievedMemoryPrompt = "";
+        if (!agentRetrievedMemories.isEmpty()) {
+            String agentRetrievedMemoryItems = agentRetrievedMemories.stream()
+                    .map(memory -> "- [%s] %s：%s".formatted(
+                            StringUtils.hasText(memory.getMemoryType()) ? memory.getMemoryType() : "fact",
+                            memory.getTitle(),
+                            memory.getContent()
+                    ))
+                    .collect(Collectors.joining("\n"));
+            agentRetrievedMemoryPrompt = """
+
+                    【当前问题相关 Agent 记忆】
+                    以下记忆是根据用户最新问题语义召回的，只适用于当前 Agent。使用规则：
+                    - 只有当它们与当前问题相关时才使用。
+                    - 如果召回记忆与当前会话上下文冲突，以当前会话上下文为准。
+                    - 不要主动暴露“语义召回记忆”这个机制，除非用户询问。
+                    %s
+                    """.formatted(agentRetrievedMemoryItems);
+        }
+
+        return userMemoryPrompt + agentCoreMemoryPrompt + agentRetrievedMemoryPrompt;
     }
 
     private Double normalizeTemperature(String model, Double temperature) {
@@ -371,7 +410,7 @@ public class JChatMindFactory {
         List<Tool> runtimeTools = resolveRuntimeTools(agentConfig, knowledgeBases, memory);
         // 将工具调用转换成 ToolCallback 的形式
         List<ToolCallback> toolCallbacks = buildToolCallbacks(runtimeTools);
-        String memoryPrompt = renderMemoryPrompt(agent.getId());
+        String memoryPrompt = renderMemoryPrompt(agent.getId(), latestUserText(memory));
 
         return buildAgentRuntime(
                 agent,

@@ -13,6 +13,8 @@ public interface AgentMemoryFacadeService {
 
     List<AgentMemoryDTO> getEnabledAgentMemories(String agentId, int limit);
 
+    List<AgentMemoryDTO> getRetrievedAgentMemories(String agentId, String query, int limit);
+
     CreateAgentMemoryResponse createAgentMemory(String agentId, CreateAgentMemoryRequest request);
 
     void updateAgentMemory(String memoryId, UpdateAgentMemoryRequest request);

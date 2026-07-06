@@ -13,7 +13,9 @@ import com.kama.jchatmind.model.response.CreateAgentMemoryResponse;
 import com.kama.jchatmind.model.response.GetAgentMemoriesResponse;
 import com.kama.jchatmind.model.vo.AgentMemoryVO;
 import com.kama.jchatmind.service.AgentMemoryFacadeService;
+import com.kama.jchatmind.service.RagService;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -23,14 +25,17 @@ import java.util.List;
 
 @Service
 @AllArgsConstructor
+@Slf4j
 public class AgentMemoryFacadeServiceImpl implements AgentMemoryFacadeService {
     private static final String DEFAULT_MEMORY_SCOPE = "core";
     private static final String DEFAULT_MEMORY_TYPE = "fact";
     private static final int DEFAULT_PRIORITY = 0;
+    private static final String RETRIEVED_MEMORY_SCOPE = "retrieved";
 
     private final AgentMemoryMapper agentMemoryMapper;
     private final AgentMapper agentMapper;
     private final AgentMemoryConverter agentMemoryConverter;
+    private final RagService ragService;
 
     @Override
     public GetAgentMemoriesResponse getAgentMemoriesByAgentId(String agentId) {
@@ -65,6 +70,24 @@ public class AgentMemoryFacadeServiceImpl implements AgentMemoryFacadeService {
     }
 
     @Override
+    public List<AgentMemoryDTO> getRetrievedAgentMemories(String agentId, String query, int limit) {
+        if (!StringUtils.hasText(agentId) || !StringUtils.hasText(query) || limit <= 0) {
+            return List.of();
+        }
+        try {
+            String vectorLiteral = toPgVector(ragService.embed(query));
+            List<AgentMemory> memories = agentMemoryMapper.selectRetrievedByAgentId(agentId, vectorLiteral, limit);
+            markUsed(memories);
+            return memories.stream()
+                    .map(agentMemoryConverter::toDTO)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("召回 Agent Retrieved Memory 失败，降级为空: agentId={}, error={}", agentId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    @Override
     public CreateAgentMemoryResponse createAgentMemory(String agentId, CreateAgentMemoryRequest request) {
         assertAgentExists(agentId);
         validateCreateRequest(request);
@@ -75,6 +98,7 @@ public class AgentMemoryFacadeServiceImpl implements AgentMemoryFacadeService {
         LocalDateTime now = LocalDateTime.now();
         dto.setCreatedAt(now);
         dto.setUpdatedAt(now);
+        fillEmbeddingIfNeeded(dto);
 
         AgentMemory entity = agentMemoryConverter.toEntity(dto);
         int result = agentMemoryMapper.insert(entity);
@@ -96,6 +120,7 @@ public class AgentMemoryFacadeServiceImpl implements AgentMemoryFacadeService {
         AgentMemoryDTO dto = agentMemoryConverter.toDTO(existing);
         agentMemoryConverter.updateDTOFromRequest(dto, request);
         normalizeDefaults(dto);
+        fillEmbeddingIfNeeded(dto);
 
         AgentMemory updated = agentMemoryConverter.toEntity(dto);
         updated.setId(existing.getId());
@@ -146,8 +171,8 @@ public class AgentMemoryFacadeServiceImpl implements AgentMemoryFacadeService {
         if (!StringUtils.hasText(dto.getContent())) {
             throw new BizException("Agent 记忆内容不能为空");
         }
-        if (!"core".equals(dto.getMemoryScope())) {
-            throw new BizException("Phase 1 仅支持 Agent Core Memory");
+        if (!"core".equals(dto.getMemoryScope()) && !RETRIEVED_MEMORY_SCOPE.equals(dto.getMemoryScope())) {
+            throw new BizException("Agent 记忆范围仅支持 core / retrieved");
         }
     }
 
@@ -169,5 +194,43 @@ public class AgentMemoryFacadeServiceImpl implements AgentMemoryFacadeService {
         dto.setMemoryScope(dto.getMemoryScope().trim());
         dto.setMemoryType(dto.getMemoryType().trim());
         validateMemory(dto);
+    }
+
+    private void fillEmbeddingIfNeeded(AgentMemoryDTO dto) {
+        if (!RETRIEVED_MEMORY_SCOPE.equals(dto.getMemoryScope())) {
+            dto.setEmbedding(null);
+            return;
+        }
+        String embeddingText = "%s\n%s".formatted(dto.getTitle(), dto.getContent());
+        try {
+            dto.setEmbedding(ragService.embed(embeddingText));
+        } catch (Exception e) {
+            throw new BizException("生成 Agent Retrieved Memory 向量失败: " + e.getMessage());
+        }
+    }
+
+    private void markUsed(List<AgentMemory> memories) {
+        List<String> usedMemoryIds = memories.stream()
+                .map(AgentMemory::getId)
+                .filter(StringUtils::hasText)
+                .toList();
+        if (!usedMemoryIds.isEmpty()) {
+            agentMemoryMapper.markUsedByIds(usedMemoryIds);
+        }
+    }
+
+    private String toPgVector(float[] vector) {
+        if (vector == null || vector.length == 0) {
+            throw new BizException("Embedding 结果为空");
+        }
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < vector.length; i++) {
+            sb.append(vector[i]);
+            if (i < vector.length - 1) {
+                sb.append(",");
+            }
+        }
+        sb.append("]");
+        return sb.toString();
     }
 }

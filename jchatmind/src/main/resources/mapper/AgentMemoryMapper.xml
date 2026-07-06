@@ -12,6 +12,7 @@
         <result property="memoryType" column="memory_type" jdbcType="VARCHAR"/>
         <result property="title" column="title" jdbcType="VARCHAR"/>
         <result property="content" column="content" jdbcType="VARCHAR"/>
+        <result property="embedding" column="embedding" jdbcType="OTHER"/>
         <result property="priority" column="priority" jdbcType="INTEGER"/>
         <result property="enabled" column="enabled" jdbcType="BOOLEAN"/>
         <result property="createdAt" column="created_at" jdbcType="TIMESTAMP"/>
@@ -21,7 +22,7 @@
 
     <sql id="Base_Column_List">
         id,agent_id,source_message_id,memory_scope,
-        memory_type,title,content,priority,
+        memory_type,title,content,embedding,priority,
         enabled,created_at,updated_at,last_used_at
     </sql>
 
@@ -35,6 +36,7 @@
             memory_type,
             title,
             content,
+            embedding,
             priority,
             enabled,
             created_at,
@@ -52,6 +54,10 @@
                 #{memoryType},
                 #{title},
                 #{content},
+                <choose>
+                    <when test="embedding != null">#{embedding}::vector</when>
+                    <otherwise>NULL</otherwise>
+                </choose>,
                 #{priority},
                 #{enabled},
                 #{createdAt},
@@ -83,6 +89,17 @@
         LIMIT #{limit}
     </select>
 
+    <select id="selectRetrievedByAgentId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM agent_memory
+        WHERE agent_id = CAST(#{agentId} AS uuid)
+          AND enabled = TRUE
+          AND memory_scope = 'retrieved'
+          AND embedding IS NOT NULL
+        ORDER BY embedding &lt;-> #{vectorLiteral}::vector
+        LIMIT #{limit}
+    </select>
+
     <update id="updateById" parameterType="com.kama.jchatmind.model.entity.AgentMemory">
         UPDATE agent_memory
         <set>
@@ -100,6 +117,9 @@
             </if>
             <if test="content != null">
                 content = #{content},
+            </if>
+            <if test="embedding != null">
+                embedding = #{embedding}::vector,
             </if>
             <if test="priority != null">
                 priority = #{priority},
