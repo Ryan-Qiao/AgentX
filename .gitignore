@@ -2,7 +2,16 @@
 
 # Runtime document storage
 data/documents/
+jchatmind/data/documents/
 
 # Local Codex workspace state
 .agents/
+.idea/
+.understand-anything/
 skills-lock.json
+
+# Local RAG evaluation cache
+.rag-eval-cache/
+
+# Editor swap files
+*.swp

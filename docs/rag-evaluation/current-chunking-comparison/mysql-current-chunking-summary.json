@@ -1,0 +1,50 @@
+{
+  "chunks_path": "docs/rag-evaluation/mysql-pdf-chunking/mysql-xiaolin-chunks.jsonl",
+  "config": {
+    "model": "bge-m3",
+    "raw_top_k": 10,
+    "final_top_k": 3,
+    "max_chunks_per_document": 2,
+    "vector_weight": 0.7,
+    "lexical_weight": 0.3
+  },
+  "chunks": 177,
+  "questions": 220,
+  "baseline_metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.4681818181818182,
+    "hit_rate_at_3": 0.7,
+    "recall_at_3": 0.7,
+    "precision_at_3": 0.257575757575758,
+    "mrr": 0.5696969696969694,
+    "mean_selected_count": 3
+  },
+  "hybrid_metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.8136363636363636,
+    "hit_rate_at_3": 0.8590909090909091,
+    "recall_at_3": 0.8590909090909091,
+    "precision_at_3": 0.331818181818182,
+    "mrr": 0.834848484848485,
+    "mean_selected_count": 3
+  },
+  "baseline_policy_metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.4681818181818182,
+    "hit_rate_at_3": 0.6136363636363636,
+    "recall_at_3": 0.6136363636363636,
+    "precision_at_3": 0.222727272727273,
+    "mrr": 0.5409090909090909,
+    "mean_selected_count": 2
+  },
+  "hybrid_policy_metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.8136363636363636,
+    "hit_rate_at_3": 0.85,
+    "recall_at_3": 0.85,
+    "precision_at_3": 0.3212121212121215,
+    "mrr": 0.8318181818181818,
+    "mean_selected_count": 2
+  },
+  "duration_seconds": 76.86
+}

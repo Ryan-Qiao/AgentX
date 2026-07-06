@@ -1,0 +1,31 @@
+{
+  "pdf": "/Users/ryan/Downloads/图解MySQL-小林coding-亮白版-v2.0.pdf",
+  "config": {
+    "raw_top_k": 10,
+    "final_top_k": 3,
+    "vector_weight": 0.7,
+    "lexical_weight": 0.3
+  },
+  "pages": 329,
+  "chunks": 225,
+  "questions": 220,
+  "baseline_metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.4409090909090909,
+    "hit_rate_at_3": 0.6818181818181818,
+    "recall_at_3": 0.6818181818181818,
+    "precision_at_3": 0.25757575757575757,
+    "mrr": 0.5446969696969697,
+    "mean_top1_distance": 20.491166043524053
+  },
+  "metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.8363636363636363,
+    "hit_rate_at_3": 0.8818181818181818,
+    "recall_at_3": 0.8818181818181818,
+    "precision_at_3": 0.34545454545454546,
+    "mrr": 0.8583333333333334,
+    "mean_top1_distance": 21.26872434849815
+  },
+  "elapsed_seconds": 17.72
+}

@@ -1,0 +1,14 @@
+{
+  "sourceMarkdown" : "docs/rag-evaluation/mysql-pdf-chunking/mysql-xiaolin.md",
+  "originalFilename" : "图解MySQL-小林coding-亮白版-v2.0.pdf",
+  "hadMarkdownHeadingBeforeEnsureTitle" : true,
+  "maxChars" : 1200,
+  "overlapChars" : 150,
+  "minChars" : 80,
+  "chunkCount" : 177,
+  "minContentLength" : 418,
+  "maxContentLength" : 1200,
+  "avgContentLength" : 1195.3107344632767,
+  "firstHeadingPath" : [ "图解MySQL-小林coding-亮白版-v2.0.pdf" ],
+  "lastHeadingPath" : [ "图解MySQL-小林coding-亮白版-v2.0.pdf" ]
+}

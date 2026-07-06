@@ -17,7 +17,8 @@ import com.kama.jchatmind.model.entity.ChunkBgeM3;
 import com.kama.jchatmind.service.DocumentFacadeService;
 import com.kama.jchatmind.service.DocumentConversionService;
 import com.kama.jchatmind.service.DocumentStorageService;
-import com.kama.jchatmind.service.MarkdownParserService;
+import com.kama.jchatmind.model.rag.MarkdownChunk;
+import com.kama.jchatmind.service.MarkdownChunkingService;
 import com.kama.jchatmind.service.RagService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,11 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -47,7 +44,7 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
     private final DocumentConverter documentConverter;
     private final DocumentStorageService documentStorageService;
     private final DocumentConversionService documentConversionService;
-    private final MarkdownParserService markdownParserService;
+    private final MarkdownChunkingService markdownChunkingService;
     private final RagService ragService;
     private final ChunkBgeM3Mapper chunkBgeM3Mapper;
     private final ObjectMapper objectMapper;
@@ -276,76 +273,60 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
             String originalFilename,
             String sourceFileType
     ) {
-        try (InputStream inputStream = new ByteArrayInputStream(markdown.getBytes(StandardCharsets.UTF_8))) {
-            List<MarkdownParserService.MarkdownSection> sections = markdownParserService.parseMarkdown(inputStream);
+        List<MarkdownChunk> markdownChunks = markdownChunkingService.chunk(
+                markdown,
+                new MarkdownChunkingService.ChunkingContext(originalFilename, sourceFileType, originalFilename)
+        );
 
-            if (sections.isEmpty()) {
-                log.warn("Markdown 文档解析后没有找到任何章节: documentId={}", documentId);
-                return;
-            }
-
-            LocalDateTime now = LocalDateTime.now();
-            int chunkCount = 0;
-
-            for (int i = 0; i < sections.size(); i++) {
-                MarkdownParserService.MarkdownSection section = sections.get(i);
-                String title = section.getTitle();
-                String content = section.getContent();
-
-                if (!StringUtils.hasText(title)) {
-                    continue;
-                }
-
-                float[] embedding = ragService.embed(buildChunkEmbeddingText(title, content));
-
-                ChunkBgeM3 chunk = ChunkBgeM3.builder()
-                        .kbId(kbId)
-                        .docId(documentId)
-                        .content(content != null ? content : "")
-                        .metadata(buildChunkMetadata(originalFilename, sourceFileType, title, i))
-                        .embedding(embedding)
-                        .createdAt(now)
-                        .updatedAt(now)
-                        .build();
-
-                int result = chunkBgeM3Mapper.insert(chunk);
-
-                if (result > 0) {
-                    chunkCount++;
-                    log.debug("创建 chunk 成功: title={}, chunkId={}", title, chunk.getId());
-                } else {
-                    log.warn("创建 chunk 失败: title={}", title);
-                }
-            }
-            log.info("Markdown 文档处理完成: documentId={}, 共生成 {} 个 chunks", documentId, chunkCount);
-        } catch (IOException e) {
-            throw new BizException("读取 Markdown 内容失败: " + e.getMessage());
+        if (markdownChunks.isEmpty()) {
+            log.warn("Markdown 文档解析后没有生成任何 chunk: documentId={}", documentId);
+            return;
         }
-    }
 
-    private String buildChunkEmbeddingText(String title, String content) {
-        String normalizedContent = StringUtils.hasText(content) ? content : "";
-        return """
-                标题：%s
+        LocalDateTime now = LocalDateTime.now();
+        int chunkCount = 0;
 
-                正文：
-                %s
-                """.formatted(title, normalizedContent).trim();
+        for (MarkdownChunk markdownChunk : markdownChunks) {
+            float[] embedding = ragService.embed(markdownChunk.getEmbeddingText());
+
+            ChunkBgeM3 chunk = ChunkBgeM3.builder()
+                    .kbId(kbId)
+                    .docId(documentId)
+                    .content(markdownChunk.getContent() != null ? markdownChunk.getContent() : "")
+                    .metadata(buildChunkMetadata(originalFilename, sourceFileType, markdownChunk))
+                    .embedding(embedding)
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build();
+
+            int result = chunkBgeM3Mapper.insert(chunk);
+
+            if (result > 0) {
+                chunkCount++;
+                log.debug("创建 chunk 成功: title={}, chunkId={}", markdownChunk.getSectionTitle(), chunk.getId());
+            } else {
+                log.warn("创建 chunk 失败: title={}", markdownChunk.getSectionTitle());
+            }
+        }
+        log.info("Markdown 文档处理完成: documentId={}, 共生成 {} 个 chunks", documentId, chunkCount);
     }
 
     private String buildChunkMetadata(
             String originalFilename,
             String sourceFileType,
-            String sectionTitle,
-            int chunkIndex
+            MarkdownChunk markdownChunk
     ) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("documentTitle", originalFilename);
-        metadata.put("sectionTitle", sectionTitle);
-        metadata.put("headingPath", List.of(sectionTitle));
+        metadata.put("sectionTitle", markdownChunk.getSectionTitle());
+        metadata.put("headingPath", markdownChunk.getHeadingPath());
+        metadata.put("headingLevel", markdownChunk.getHeadingLevel());
         metadata.put("sourceFileType", sourceFileType);
         metadata.put("originalFileName", originalFilename);
-        metadata.put("chunkIndex", chunkIndex);
+        metadata.put("chunkIndex", markdownChunk.getChunkIndex());
+        metadata.put("sectionChunkIndex", markdownChunk.getSectionChunkIndex());
+        metadata.put("charStart", markdownChunk.getCharStart());
+        metadata.put("charEnd", markdownChunk.getCharEnd());
         try {
             return objectMapper.writeValueAsString(metadata);
         } catch (JsonProcessingException e) {

@@ -24,6 +24,8 @@ import { useDocuments } from "../../hooks/useDocuments.ts";
 import { uploadDocument, type DocumentVO } from "../../api/api.ts";
 
 const { Text } = Typography;
+const MAX_UPLOAD_FILE_SIZE_MB = 150;
+const MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024;
 
 const KnowledgeBaseView: React.FC = () => {
   const { knowledgeBaseId } = useParams<{ knowledgeBaseId?: string }>();
@@ -49,10 +51,20 @@ const KnowledgeBaseView: React.FC = () => {
       return;
     }
 
+    const uploadFile = file as File;
+    if (uploadFile.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+      const error = new Error(
+        `文件大小为 ${formatFileSize(uploadFile.size)}，超过 ${MAX_UPLOAD_FILE_SIZE_MB}MB 上传限制`,
+      );
+      message.error(error.message);
+      onError?.(error);
+      return;
+    }
+
     setUploading(true);
 
     try {
-      await uploadDocument(knowledgeBaseId, file as File);
+      await uploadDocument(knowledgeBaseId, uploadFile);
       message.success("文档上传成功");
       await refreshDocuments();
       onSuccess?.(file);

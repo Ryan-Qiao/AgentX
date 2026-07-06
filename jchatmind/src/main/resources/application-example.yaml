@@ -1,6 +1,10 @@
 spring:
   application:
     name: jchatmind
+  servlet:
+    multipart:
+      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:150MB}
+      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:150MB}
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/jchatmind}
     username: ${DB_USERNAME:postgres}
@@ -46,8 +50,12 @@ rag:
   document-converter:
     markitdown-command: ${MARKITDOWN_COMMAND:markitdown}
     timeout-seconds: ${MARKITDOWN_TIMEOUT_SECONDS:60}
-    max-file-size-mb: ${RAG_DOCUMENT_MAX_FILE_SIZE_MB:30}
+    max-file-size-mb: ${RAG_DOCUMENT_MAX_FILE_SIZE_MB:150}
     enabled-formats: ${RAG_DOCUMENT_ENABLED_FORMATS:md,markdown,txt,pdf,docx,pptx,xlsx,html,csv,json,xml}
+  chunking:
+    max-chars: ${RAG_CHUNKING_MAX_CHARS:1200}
+    overlap-chars: ${RAG_CHUNKING_OVERLAP_CHARS:150}
+    min-chars: ${RAG_CHUNKING_MIN_CHARS:80}
   retrieval:
     raw-top-k: ${RAG_RETRIEVAL_RAW_TOP_K:10}
     final-top-k: ${RAG_RETRIEVAL_FINAL_TOP_K:3}
