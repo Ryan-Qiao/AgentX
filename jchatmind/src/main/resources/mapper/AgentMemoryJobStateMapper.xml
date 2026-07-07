@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kama.jchatmind.mapper.AgentMemoryJobStateMapper">
+
+    <resultMap id="BaseResultMap" type="com.kama.jchatmind.model.entity.AgentMemoryJobState">
+        <id property="id" column="id" jdbcType="VARCHAR"/>
+        <result property="agentId" column="agent_id" jdbcType="VARCHAR"/>
+        <result property="sessionId" column="session_id" jdbcType="VARCHAR"/>
+        <result property="processedUserMessageCount" column="processed_user_message_count" jdbcType="INTEGER"/>
+        <result property="lastProcessedMessageId" column="last_processed_message_id" jdbcType="VARCHAR"/>
+        <result property="lastProcessedMessageCreatedAt" column="last_processed_message_created_at" jdbcType="TIMESTAMP"/>
+        <result property="createdAt" column="created_at" jdbcType="TIMESTAMP"/>
+        <result property="updatedAt" column="updated_at" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.kama.jchatmind.model.entity.AgentMemoryJobState"
+            keyColumn="id" keyProperty="id" useGeneratedKeys="true">
+        INSERT INTO agent_memory_job_state
+        (
+            agent_id,
+            session_id,
+            processed_user_message_count,
+            last_processed_message_id,
+            last_processed_message_created_at,
+            created_at,
+            updated_at
+        )
+        VALUES
+            (
+                CAST(#{agentId} AS uuid),
+                CAST(#{sessionId} AS uuid),
+                #{processedUserMessageCount},
+                <choose>
+                    <when test="lastProcessedMessageId != null">CAST(#{lastProcessedMessageId} AS uuid)</when>
+                    <otherwise>NULL</otherwise>
+                </choose>,
+                #{lastProcessedMessageCreatedAt},
+                #{createdAt},
+                #{updatedAt}
+            )
+        ON CONFLICT (agent_id, session_id) DO NOTHING
+    </insert>
+
+    <select id="selectByAgentIdAndSessionId" resultMap="BaseResultMap">
+        SELECT
+            id,
+            agent_id,
+            session_id,
+            processed_user_message_count,
+            last_processed_message_id,
+            last_processed_message_created_at,
+            created_at,
+            updated_at
+        FROM agent_memory_job_state
+        WHERE agent_id = CAST(#{agentId} AS uuid)
+          AND session_id = CAST(#{sessionId} AS uuid)
+    </select>
+
+    <update id="updateProgress">
+        UPDATE agent_memory_job_state
+        SET processed_user_message_count = #{processedUserMessageCount},
+            last_processed_message_id =
+            <choose>
+                <when test="lastProcessedMessageId != null">CAST(#{lastProcessedMessageId} AS uuid)</when>
+                <otherwise>NULL</otherwise>
+            </choose>,
+            last_processed_message_created_at = #{lastProcessedMessageCreatedAt},
+            updated_at = NOW()
+        WHERE agent_id = CAST(#{agentId} AS uuid)
+          AND session_id = CAST(#{sessionId} AS uuid)
+    </update>
+</mapper>

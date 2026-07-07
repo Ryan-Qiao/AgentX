@@ -95,6 +95,47 @@
         ORDER BY created_at ASC
     </select>
 
+    <select id="countUserMessages" resultType="int">
+        SELECT COUNT(*)
+        FROM chat_message
+        WHERE session_id = CAST(#{sessionId} AS uuid)
+          AND role = 'user'
+    </select>
+
+    <select id="selectUnprocessedUserMessages" resultMap="BaseResultMap">
+        SELECT
+            id,
+            session_id,
+            role,
+            content,
+            metadata::text AS metadata,
+            created_at,
+            updated_at
+        FROM chat_message
+        WHERE session_id = CAST(#{sessionId} AS uuid)
+          AND role = 'user'
+        ORDER BY created_at ASC
+        LIMIT #{limit}
+        OFFSET #{offset}
+    </select>
+
+    <select id="selectUserAssistantMessagesAfter" resultMap="BaseResultMap">
+        SELECT
+            id,
+            session_id,
+            role,
+            content,
+            metadata::text AS metadata,
+            created_at,
+            updated_at
+        FROM chat_message
+        WHERE session_id = CAST(#{sessionId} AS uuid)
+          AND role IN ('user', 'assistant')
+          AND created_at &gt;= #{startCreatedAt}
+        ORDER BY created_at ASC
+        LIMIT #{limit}
+    </select>
+
     <delete id="deleteById">
         DELETE FROM chat_message WHERE id = CAST(#{id} AS uuid)
     </delete>

@@ -2,7 +2,9 @@ package com.kama.jchatmind.mapper;
 
 import com.kama.jchatmind.model.entity.ChatMessage;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -20,6 +22,20 @@ public interface ChatMessageMapper {
     List<ChatMessage> selectBySessionId(String sessionId);
 
     List<ChatMessage> selectBySessionIdRecently(String sessionId, int limit);
+
+    int countUserMessages(@Param("sessionId") String sessionId);
+
+    List<ChatMessage> selectUnprocessedUserMessages(
+            @Param("sessionId") String sessionId,
+            @Param("offset") int offset,
+            @Param("limit") int limit
+    );
+
+    List<ChatMessage> selectUserAssistantMessagesAfter(
+            @Param("sessionId") String sessionId,
+            @Param("startCreatedAt") LocalDateTime startCreatedAt,
+            @Param("limit") int limit
+    );
 
     int deleteById(String id);
 

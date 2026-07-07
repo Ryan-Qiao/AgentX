@@ -2,11 +2,16 @@ package com.kama.jchatmind.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.kama.jchatmind.converter.ChatMessageConverter;
+import com.kama.jchatmind.event.AutoMemoryEvent;
 import com.kama.jchatmind.event.ChatEvent;
 import com.kama.jchatmind.exception.BizException;
+import com.kama.jchatmind.mapper.AgentMapper;
+import com.kama.jchatmind.mapper.AgentMemoryJobStateMapper;
 import com.kama.jchatmind.mapper.ChatMessageMapper;
 import com.kama.jchatmind.mapper.ChatSessionMapper;
 import com.kama.jchatmind.model.dto.ChatMessageDTO;
+import com.kama.jchatmind.model.entity.Agent;
+import com.kama.jchatmind.model.entity.AgentMemoryJobState;
 import com.kama.jchatmind.model.entity.ChatMessage;
 import com.kama.jchatmind.model.entity.ChatSession;
 import com.kama.jchatmind.model.request.CreateChatMessageRequest;
@@ -30,6 +35,8 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
 
     private final ChatMessageMapper chatMessageMapper;
     private final ChatSessionMapper chatSessionMapper;
+    private final AgentMapper agentMapper;
+    private final AgentMemoryJobStateMapper agentMemoryJobStateMapper;
     private final ChatMessageConverter chatMessageConverter;
     private final ApplicationEventPublisher publisher;
 
@@ -84,6 +91,7 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
                         chatMessage.getContent()
                 )
         );
+        publishAutoMemoryEventIfNeeded(chatSession, chatMessage);
         // 返回生成的 chatMessageId
         return CreateChatMessageResponse.builder()
                 .chatMessageId(chatMessage.getId())
@@ -132,6 +140,35 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
         } catch (JsonProcessingException e) {
             throw new BizException("创建聊天消息时发生序列化错误: " + e.getMessage());
         }
+    }
+
+    private void publishAutoMemoryEventIfNeeded(ChatSession chatSession, ChatMessage chatMessage) {
+        if (!ChatMessageDTO.RoleType.USER.getRole().equals(chatMessage.getRole())) {
+            return;
+        }
+        Agent agent = agentMapper.selectById(chatSession.getAgentId());
+        if (agent == null || !Boolean.TRUE.equals(agent.getAutoMemoryEnabled())) {
+            return;
+        }
+        int interval = normalizeAutoMemoryInterval(agent.getAutoMemoryInterval());
+        int totalUserMessages = chatMessageMapper.countUserMessages(chatSession.getId());
+        AgentMemoryJobState state = agentMemoryJobStateMapper.selectByAgentIdAndSessionId(
+                chatSession.getAgentId(),
+                chatSession.getId()
+        );
+        int processedUserMessages = state == null || state.getProcessedUserMessageCount() == null
+                ? 0
+                : state.getProcessedUserMessageCount();
+        if (totalUserMessages - processedUserMessages >= interval) {
+            publisher.publishEvent(new AutoMemoryEvent(chatSession.getAgentId(), chatSession.getId()));
+        }
+    }
+
+    private int normalizeAutoMemoryInterval(Integer interval) {
+        if (interval == null) {
+            return 10;
+        }
+        return Math.max(3, Math.min(50, interval));
     }
 
     @Override

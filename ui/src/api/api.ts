@@ -18,6 +18,8 @@ export interface CreateAgentRequest {
   allowedTools?: string[];
   allowedKbs?: string[];
   chatOptions?: ChatOptions;
+  autoMemoryEnabled?: boolean;
+  autoMemoryInterval?: number;
 }
 
 export interface UpdateAgentRequest {
@@ -43,6 +45,8 @@ export interface AgentVO {
   allowedTools?: string[];
   allowedKbs?: string[];
   chatOptions?: ChatOptions;
+  autoMemoryEnabled?: boolean;
+  autoMemoryInterval?: number;
   createdAt?: string;
   updatedAt?: string;
 }

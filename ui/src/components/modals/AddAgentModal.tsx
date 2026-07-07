@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Button, Checkbox, Input, List, Modal, Select, Slider, Switch, message } from "antd";
+import { Button, Checkbox, Input, InputNumber, List, Modal, Select, Slider, Switch, message } from "antd";
 import TextArea from "antd/es/input/TextArea";
 import { DeleteOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
 import {
@@ -77,6 +77,8 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
       topP: 1.0,
       messageLength: 20,
     },
+    autoMemoryEnabled: false,
+    autoMemoryInterval: 10,
   });
 
   const [createAgentLoading, setCreateAgentLoading] = useState(false);
@@ -105,6 +107,8 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
           topP: 1.0,
           messageLength: 10,
         },
+        autoMemoryEnabled: editingAgent.autoMemoryEnabled ?? false,
+        autoMemoryInterval: editingAgent.autoMemoryInterval ?? 10,
       });
     } else {
       // 重置表单
@@ -120,6 +124,8 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
           topP: 1.0,
           messageLength: 10,
         },
+        autoMemoryEnabled: false,
+        autoMemoryInterval: 10,
       });
     }
   }, [editingAgent, open]);
@@ -195,8 +201,8 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
             })}
           </div>
         </div>
-        <div className="flex-1 h-full relative">
-          <div className="px-4 pb-4 overflow-y-scroll">
+        <div className="flex-1 h-full min-h-0 flex flex-col">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
             {selectedKey === "base" && (
               <div>
                 <div className="mb-3">
@@ -245,6 +251,54 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
                     }
                   />
                 </div>
+                {!isEditMode && (
+                  <div className="mb-3 rounded-lg border border-gray-200 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <label className="block text-gray-700 font-medium mb-1">
+                          Agent 自动记忆
+                        </label>
+                        <p className="text-xs text-gray-500">
+                          开启后，Agent 会在后台定期整理对话，把长期有用的信息保存为当前 Agent 的记忆，用于后续会话。自动记忆只能在创建 Agent 时开启，创建后第一版不支持再打开或关闭。
+                        </p>
+                      </div>
+                      <Switch
+                        checked={!!formData.autoMemoryEnabled}
+                        onChange={(checked) =>
+                          setFormData({
+                            ...formData,
+                            autoMemoryEnabled: checked,
+                            autoMemoryInterval: formData.autoMemoryInterval ?? 10,
+                          })
+                        }
+                      />
+                    </div>
+                    {formData.autoMemoryEnabled && (
+                      <div className="mt-3">
+                        <label className="block text-sm text-gray-600 mb-1">
+                          记忆整理频率
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-500">每</span>
+                          <InputNumber
+                            min={3}
+                            max={50}
+                            value={formData.autoMemoryInterval ?? 10}
+                            onChange={(value) =>
+                              setFormData({
+                                ...formData,
+                                autoMemoryInterval: value ?? 10,
+                              })
+                            }
+                          />
+                          <span className="text-sm text-gray-500">
+                            条用户消息整理一次
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {selectedKey === "model" && (
@@ -714,7 +768,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
               </div>
             )}
           </div>
-          <div className="absolute bottom-0 right-0">
+          <div className="flex justify-end border-t border-gray-100 bg-white px-4 pt-3">
             <Button
               type="primary"
               icon={<SaveOutlined />}
@@ -723,7 +777,16 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
                 setCreateAgentLoading(true);
                 try {
                   if (isEditMode && editingAgent && updateAgentHandle) {
-                    await updateAgentHandle(editingAgent.id, formData);
+                    const updatePayload: UpdateAgentRequest = {
+                      name: formData.name,
+                      description: formData.description,
+                      systemPrompt: formData.systemPrompt,
+                      model: formData.model,
+                      allowedTools: formData.allowedTools,
+                      allowedKbs: formData.allowedKbs,
+                      chatOptions: formData.chatOptions,
+                    };
+                    await updateAgentHandle(editingAgent.id, updatePayload);
                   } else {
                     await createAgentHandle(formData);
                   }

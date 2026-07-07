@@ -28,6 +28,10 @@ public class AgentDTO {
 
     private ChatOptions chatOptions;
 
+    private Boolean autoMemoryEnabled;
+
+    private Integer autoMemoryInterval;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

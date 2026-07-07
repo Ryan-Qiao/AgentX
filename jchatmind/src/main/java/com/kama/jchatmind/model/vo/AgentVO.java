@@ -24,4 +24,8 @@ public class AgentVO {
     private List<String> allowedKbs;
 
     private AgentDTO.ChatOptions chatOptions;
+
+    private Boolean autoMemoryEnabled;
+
+    private Integer autoMemoryInterval;
 }

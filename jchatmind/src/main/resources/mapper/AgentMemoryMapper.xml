@@ -100,6 +100,15 @@
         LIMIT #{limit}
     </select>
 
+    <select id="countExactDuplicate" resultType="int">
+        SELECT COUNT(*)
+        FROM agent_memory
+        WHERE agent_id = CAST(#{agentId} AS uuid)
+          AND memory_scope = #{memoryScope}
+          AND title = #{title}
+          AND content = #{content}
+    </select>
+
     <update id="updateById" parameterType="com.kama.jchatmind.model.entity.AgentMemory">
         UPDATE agent_memory
         <set>

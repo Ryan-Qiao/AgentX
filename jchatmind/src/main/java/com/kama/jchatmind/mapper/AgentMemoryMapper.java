@@ -22,6 +22,13 @@ public interface AgentMemoryMapper {
             @Param("limit") int limit
     );
 
+    int countExactDuplicate(
+            @Param("agentId") String agentId,
+            @Param("memoryScope") String memoryScope,
+            @Param("title") String title,
+            @Param("content") String content
+    );
+
     int markUsedByIds(@Param("ids") List<String> ids);
 
     int updateById(AgentMemory agentMemory);

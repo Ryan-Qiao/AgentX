@@ -30,6 +30,10 @@ public class Agent {
     // JSON String
     private String chatOptions;
 
+    private Boolean autoMemoryEnabled;
+
+    private Integer autoMemoryInterval;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
@@ -54,6 +58,8 @@ public class Agent {
                 && (this.getAllowedTools() == null ? other.getAllowedTools() == null : this.getAllowedTools().equals(other.getAllowedTools()))
                 && (this.getAllowedKbs() == null ? other.getAllowedKbs() == null : this.getAllowedKbs().equals(other.getAllowedKbs()))
                 && (this.getChatOptions() == null ? other.getChatOptions() == null : this.getChatOptions().equals(other.getChatOptions()))
+                && (this.getAutoMemoryEnabled() == null ? other.getAutoMemoryEnabled() == null : this.getAutoMemoryEnabled().equals(other.getAutoMemoryEnabled()))
+                && (this.getAutoMemoryInterval() == null ? other.getAutoMemoryInterval() == null : this.getAutoMemoryInterval().equals(other.getAutoMemoryInterval()))
                 && (this.getCreatedAt() == null ? other.getCreatedAt() == null : this.getCreatedAt().equals(other.getCreatedAt()))
                 && (this.getUpdatedAt() == null ? other.getUpdatedAt() == null : this.getUpdatedAt().equals(other.getUpdatedAt()));
     }
@@ -70,6 +76,8 @@ public class Agent {
         result = prime * result + ((getAllowedTools() == null) ? 0 : getAllowedTools().hashCode());
         result = prime * result + ((getAllowedKbs() == null) ? 0 : getAllowedKbs().hashCode());
         result = prime * result + ((getChatOptions() == null) ? 0 : getChatOptions().hashCode());
+        result = prime * result + ((getAutoMemoryEnabled() == null) ? 0 : getAutoMemoryEnabled().hashCode());
+        result = prime * result + ((getAutoMemoryInterval() == null) ? 0 : getAutoMemoryInterval().hashCode());
         result = prime * result + ((getCreatedAt() == null) ? 0 : getCreatedAt().hashCode());
         result = prime * result + ((getUpdatedAt() == null) ? 0 : getUpdatedAt().hashCode());
         return result;
@@ -88,6 +96,8 @@ public class Agent {
                 ", allowedTools=" + allowedTools +
                 ", allowedKbs=" + allowedKbs +
                 ", chatOptions=" + chatOptions +
+                ", autoMemoryEnabled=" + autoMemoryEnabled +
+                ", autoMemoryInterval=" + autoMemoryInterval +
                 ", createdAt=" + createdAt +
                 ", updatedAt=" + updatedAt +
                 "]";

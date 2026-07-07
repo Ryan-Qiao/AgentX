@@ -34,6 +34,8 @@ public class AgentConverter {
                 .allowedTools(objectMapper.writeValueAsString(agentDTO.getAllowedTools()))
                 .allowedKbs(objectMapper.writeValueAsString(agentDTO.getAllowedKbs()))
                 .chatOptions(objectMapper.writeValueAsString(agentDTO.getChatOptions()))
+                .autoMemoryEnabled(Boolean.TRUE.equals(agentDTO.getAutoMemoryEnabled()))
+                .autoMemoryInterval(normalizeAutoMemoryInterval(agentDTO.getAutoMemoryInterval()))
                 .createdAt(agentDTO.getCreatedAt())
                 .updatedAt(agentDTO.getUpdatedAt())
                 .build();
@@ -55,6 +57,8 @@ public class AgentConverter {
                 .allowedTools(objectMapper.readValue(agent.getAllowedTools(), new TypeReference<>(){}))
                 .allowedKbs(objectMapper.readValue(agent.getAllowedKbs(), new TypeReference<>(){}))
                 .chatOptions(objectMapper.readValue(agent.getChatOptions(), AgentDTO.ChatOptions.class))
+                .autoMemoryEnabled(Boolean.TRUE.equals(agent.getAutoMemoryEnabled()))
+                .autoMemoryInterval(normalizeAutoMemoryInterval(agent.getAutoMemoryInterval()))
                 .createdAt(agent.getCreatedAt())
                 .updatedAt(agent.getUpdatedAt())
                 .build();
@@ -70,6 +74,8 @@ public class AgentConverter {
                 .allowedTools(dto.getAllowedTools())
                 .allowedKbs(dto.getAllowedKbs())
                 .chatOptions(dto.getChatOptions())
+                .autoMemoryEnabled(Boolean.TRUE.equals(dto.getAutoMemoryEnabled()))
+                .autoMemoryInterval(normalizeAutoMemoryInterval(dto.getAutoMemoryInterval()))
                 .build();
     }
 
@@ -92,6 +98,8 @@ public class AgentConverter {
                 .allowedTools(request.getAllowedTools())
                 .allowedKbs(request.getAllowedKbs())
                 .chatOptions(request.getChatOptions())
+                .autoMemoryEnabled(Boolean.TRUE.equals(request.getAutoMemoryEnabled()))
+                .autoMemoryInterval(normalizeAutoMemoryInterval(request.getAutoMemoryInterval()))
                 .build();
     }
 
@@ -120,5 +128,12 @@ public class AgentConverter {
         if (request.getChatOptions() != null) {
             dto.setChatOptions(request.getChatOptions());
         }
+    }
+
+    private Integer normalizeAutoMemoryInterval(Integer interval) {
+        if (interval == null) {
+            return 10;
+        }
+        return Math.max(3, Math.min(50, interval));
     }
 }

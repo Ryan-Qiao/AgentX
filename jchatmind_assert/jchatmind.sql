@@ -10,6 +10,8 @@ CREATE TABLE agent (
     allowed_tools JSONB,                   -- 允许使用的工具列表
     allowed_kbs JSONB,                     -- 允许访问的知识库
     chat_options JSONB,                    -- 其它配置项（温度、top_p、最大token）
+    auto_memory_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    auto_memory_interval INT NOT NULL DEFAULT 10,
     
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
@@ -66,6 +68,18 @@ CREATE INDEX idx_agent_memory_embedding
 ON agent_memory
 USING ivfflat (embedding vector_l2_ops)
 WITH (lists = 100);
+
+CREATE TABLE agent_memory_job_state (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id UUID NOT NULL REFERENCES agent(id) ON DELETE CASCADE,
+    session_id UUID NOT NULL REFERENCES chat_session(id) ON DELETE CASCADE,
+    processed_user_message_count INT NOT NULL DEFAULT 0,
+    last_processed_message_id UUID REFERENCES chat_message(id) ON DELETE SET NULL,
+    last_processed_message_created_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE (agent_id, session_id)
+);
 
 CREATE TABLE user_memory (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
