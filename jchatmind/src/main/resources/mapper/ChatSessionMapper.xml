@@ -59,7 +59,7 @@
             created_at,
             updated_at
         FROM chat_session
-        ORDER BY updated_at DESC
+        ORDER BY COALESCE((metadata ->> 'pinned')::boolean, false) DESC, updated_at DESC
     </select>
 
     <select id="selectByAgentId" resultMap="BaseResultMap">
@@ -72,12 +72,26 @@
             updated_at
         FROM chat_session
         WHERE agent_id = CAST(#{agentId} AS uuid)
-        ORDER BY updated_at DESC
+        ORDER BY COALESCE((metadata ->> 'pinned')::boolean, false) DESC, updated_at DESC
     </select>
 
     <delete id="deleteById">
         DELETE FROM chat_session WHERE id = CAST(#{id} AS uuid)
     </delete>
+
+    <delete id="deleteByIds">
+        DELETE FROM chat_session
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            CAST(#{id} AS uuid)
+        </foreach>
+    </delete>
+
+    <update id="touchUpdatedAt">
+        UPDATE chat_session
+        SET updated_at = NOW()
+        WHERE id = CAST(#{id} AS uuid)
+    </update>
 
     <update id="updateById" parameterType="com.kama.jchatmind.model.entity.ChatSession">
         UPDATE chat_session

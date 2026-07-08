@@ -1,0 +1,96 @@
+{
+  "chunks_path": "docs/rag-evaluation/mysql-pdf-chunking/mysql-xiaolin-chunks.jsonl",
+  "config": {
+    "embedding_model": "bge-m3",
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "device": "mps",
+    "batch_size": 32,
+    "max_length": 1024,
+    "raw_top_k": 20,
+    "final_top_k": 3,
+    "max_chunks_per_document": 2,
+    "vector_weight": 0.7,
+    "lexical_weight": 0.3
+  },
+  "chunks": 177,
+  "questions": 220,
+  "baseline_metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.4681818181818182,
+    "hit_rate_at_3": 0.7,
+    "recall_at_3": 0.7,
+    "precision_at_3": 0.257575757575758,
+    "mrr": 0.5696969696969694,
+    "mean_selected_count": 3
+  },
+  "hybrid_metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.8681818181818182,
+    "hit_rate_at_3": 0.9318181818181818,
+    "recall_at_3": 0.9318181818181818,
+    "precision_at_3": 0.36363636363636365,
+    "mrr": 0.8984848484848486,
+    "mean_selected_count": 3
+  },
+  "bge_reranker_metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.7954545454545454,
+    "hit_rate_at_3": 0.9,
+    "recall_at_3": 0.9,
+    "precision_at_3": 0.34848484848484856,
+    "mrr": 0.8424242424242425,
+    "mean_selected_count": 3
+  },
+  "baseline_policy_metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.4681818181818182,
+    "hit_rate_at_3": 0.6136363636363636,
+    "recall_at_3": 0.6136363636363636,
+    "precision_at_3": 0.222727272727273,
+    "mrr": 0.5409090909090909,
+    "mean_selected_count": 2
+  },
+  "hybrid_policy_metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.8681818181818182,
+    "hit_rate_at_3": 0.9227272727272727,
+    "recall_at_3": 0.9227272727272727,
+    "precision_at_3": 0.3515151515151516,
+    "mrr": 0.8954545454545455,
+    "mean_selected_count": 2
+  },
+  "bge_reranker_policy_metrics": {
+    "question_count": 220,
+    "hit_rate_at_1": 0.7954545454545454,
+    "hit_rate_at_3": 0.8681818181818182,
+    "recall_at_3": 0.8681818181818182,
+    "precision_at_3": 0.33030303030303054,
+    "mrr": 0.8318181818181818,
+    "mean_selected_count": 2
+  },
+  "bge_reranker_score_distribution": {
+    "positive": {
+      "count": 230,
+      "min": 0.7022895812988281,
+      "p10": 2.33722620010376,
+      "p25": 3.053972363471985,
+      "p50": 3.927114248275757,
+      "p75": 4.818107604980469,
+      "p90": 5.665761709213257,
+      "max": 7.621950149536133,
+      "mean": 3.9663371337496716
+    },
+    "negative": {
+      "count": 430,
+      "min": -4.543957710266113,
+      "p10": -1.0231884717941284,
+      "p25": 0.39852461963891983,
+      "p50": 1.7437572479248047,
+      "p75": 2.8289161920547485,
+      "p90": 4.008902835845949,
+      "max": 6.5910258293151855,
+      "mean": 1.6244363962217818
+    }
+  },
+  "duration_seconds": 17.38
+}

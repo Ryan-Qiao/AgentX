@@ -243,6 +243,9 @@ export interface ChatSessionVO {
   id: string;
   agentId?: string | null;
   title?: string;
+  pinned?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface GetChatSessionsResponse {
@@ -255,6 +258,7 @@ export interface GetChatSessionResponse {
 
 export interface UpdateChatSessionRequest {
   title?: string;
+  pinned?: boolean;
 }
 
 /**
@@ -290,6 +294,13 @@ export async function updateChatSession(
   request: UpdateChatSessionRequest,
 ): Promise<void> {
   return patch<void>(`/chat-sessions/${chatSessionId}`, request);
+}
+
+/**
+ * 批量删除聊天会话
+ */
+export async function deleteChatSessions(chatSessionIds: string[]): Promise<void> {
+  return post<void>("/chat-sessions/batch-delete", { chatSessionIds });
 }
 
 /**

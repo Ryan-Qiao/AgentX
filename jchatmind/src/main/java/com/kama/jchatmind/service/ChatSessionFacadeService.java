@@ -6,6 +6,8 @@ import com.kama.jchatmind.model.response.CreateChatSessionResponse;
 import com.kama.jchatmind.model.response.GetChatSessionResponse;
 import com.kama.jchatmind.model.response.GetChatSessionsResponse;
 
+import java.util.List;
+
 public interface ChatSessionFacadeService {
     GetChatSessionsResponse getChatSessions();
 
@@ -16,6 +18,8 @@ public interface ChatSessionFacadeService {
     CreateChatSessionResponse createChatSession(CreateChatSessionRequest request);
 
     void deleteChatSession(String chatSessionId);
+
+    void deleteChatSessions(List<String> chatSessionIds);
 
     void updateChatSession(String chatSessionId, UpdateChatSessionRequest request);
 }

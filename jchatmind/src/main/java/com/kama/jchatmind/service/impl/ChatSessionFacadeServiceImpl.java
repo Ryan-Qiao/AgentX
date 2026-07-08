@@ -15,6 +15,7 @@ import com.kama.jchatmind.model.vo.ChatSessionVO;
 import com.kama.jchatmind.service.ChatSessionFacadeService;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -114,6 +115,26 @@ public class ChatSessionFacadeServiceImpl implements ChatSessionFacadeService {
         }
         
         int result = chatSessionMapper.deleteById(chatSessionId);
+        if (result <= 0) {
+            throw new BizException("删除聊天会话失败");
+        }
+    }
+
+    @Override
+    public void deleteChatSessions(List<String> chatSessionIds) {
+        if (chatSessionIds == null || chatSessionIds.isEmpty()) {
+            throw new BizException("请选择要删除的聊天会话");
+        }
+
+        List<String> validIds = chatSessionIds.stream()
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        if (validIds.isEmpty()) {
+            throw new BizException("请选择要删除的聊天会话");
+        }
+
+        int result = chatSessionMapper.deleteByIds(validIds);
         if (result <= 0) {
             throw new BizException("删除聊天会话失败");
         }

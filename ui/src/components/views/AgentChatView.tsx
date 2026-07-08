@@ -267,6 +267,7 @@ const AgentChatView: React.FC = () => {
           role: "user",
           content: trimmedContent,
         });
+        await refreshChatSessions();
       } catch (error) {
         console.error("发送聊天消息失败:", error);
         removeMessage(optimisticId);
@@ -275,7 +276,7 @@ const AgentChatView: React.FC = () => {
         antdMessage.error("消息发送失败，请重试");
       }
     },
-    [showAssistantWaiting],
+    [refreshChatSessions, showAssistantWaiting],
   );
 
   const handleSendMessage = async (value: string | { text: string }) => {
@@ -379,6 +380,7 @@ const AgentChatView: React.FC = () => {
         // 完整消息到达：启动“假流式”逐字打印动画
         const finalMsg = message.payload.message;
         const content = finalMsg?.content || "";
+        void refreshChatSessions();
 
         if (!finalMsg) {
           setIsStreaming(false);
@@ -446,7 +448,7 @@ const AgentChatView: React.FC = () => {
       es.close();
       resetTypewriter();
     };
-  }, [chatSessionId, startTypewriter, resetTypewriter]);
+  }, [chatSessionId, refreshChatSessions, startTypewriter, resetTypewriter]);
 
   if (!chatSessionId) {
     return (

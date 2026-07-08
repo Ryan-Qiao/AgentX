@@ -2,7 +2,10 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import {
   type ChatSessionVO,
   getChatSessions,
-  deleteChatSession,
+  deleteChatSession as deleteChatSessionApi,
+  deleteChatSessions as deleteChatSessionsApi,
+  updateChatSession as updateChatSessionApi,
+  type UpdateChatSessionRequest,
 } from "../api/api.ts";
 
 interface ChatSessionsContextType {
@@ -10,6 +13,11 @@ interface ChatSessionsContextType {
   loading: boolean;
   refreshChatSessions: () => Promise<void>;
   deleteChatSession: (chatSessionId: string) => Promise<void>;
+  deleteChatSessions: (chatSessionIds: string[]) => Promise<void>;
+  updateChatSession: (
+    chatSessionId: string,
+    request: UpdateChatSessionRequest,
+  ) => Promise<void>;
 }
 
 const ChatSessionsContext = createContext<ChatSessionsContextType | undefined>(
@@ -35,9 +43,22 @@ export function ChatSessionsProvider({ children }: { children: React.ReactNode }
   }, [fetchChatSessions]);
 
   const deleteChatSessionHandle = useCallback(async (chatSessionId: string) => {
-    await deleteChatSession(chatSessionId);
+    await deleteChatSessionApi(chatSessionId);
     await fetchChatSessions();
   }, [fetchChatSessions]);
+
+  const deleteChatSessionsHandle = useCallback(async (chatSessionIds: string[]) => {
+    await deleteChatSessionsApi(chatSessionIds);
+    await fetchChatSessions();
+  }, [fetchChatSessions]);
+
+  const updateChatSessionHandle = useCallback(
+    async (chatSessionId: string, request: UpdateChatSessionRequest) => {
+      await updateChatSessionApi(chatSessionId, request);
+      await fetchChatSessions();
+    },
+    [fetchChatSessions],
+  );
 
   return (
     <ChatSessionsContext.Provider
@@ -46,6 +67,8 @@ export function ChatSessionsProvider({ children }: { children: React.ReactNode }
         loading,
         refreshChatSessions: fetchChatSessions,
         deleteChatSession: deleteChatSessionHandle,
+        deleteChatSessions: deleteChatSessionsHandle,
+        updateChatSession: updateChatSessionHandle,
       }}
     >
       {children}
@@ -62,4 +85,3 @@ export function useChatSessionsContext() {
   }
   return context;
 }
-

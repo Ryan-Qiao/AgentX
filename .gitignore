@@ -12,6 +12,7 @@ skills-lock.json
 
 # Local RAG evaluation cache
 .rag-eval-cache/
+.rag-reranker-venv/
 
 # Editor swap files
 *.swp

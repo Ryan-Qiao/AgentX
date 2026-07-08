@@ -2,6 +2,7 @@ package com.kama.jchatmind.controller;
 
 import com.kama.jchatmind.model.common.ApiResponse;
 import com.kama.jchatmind.model.request.CreateChatSessionRequest;
+import com.kama.jchatmind.model.request.DeleteChatSessionsRequest;
 import com.kama.jchatmind.model.request.UpdateChatSessionRequest;
 import com.kama.jchatmind.model.response.CreateChatSessionResponse;
 import com.kama.jchatmind.model.response.GetChatSessionResponse;
@@ -45,6 +46,13 @@ public class ChatSessionController {
     @DeleteMapping("/chat-sessions/{chatSessionId}")
     public ApiResponse<Void> deleteChatSession(@PathVariable String chatSessionId) {
         chatSessionFacadeService.deleteChatSession(chatSessionId);
+        return ApiResponse.success();
+    }
+
+    // 批量删除聊天会话
+    @PostMapping("/chat-sessions/batch-delete")
+    public ApiResponse<Void> deleteChatSessions(@RequestBody DeleteChatSessionsRequest request) {
+        chatSessionFacadeService.deleteChatSessions(request == null ? null : request.getChatSessionIds());
         return ApiResponse.success();
     }
 

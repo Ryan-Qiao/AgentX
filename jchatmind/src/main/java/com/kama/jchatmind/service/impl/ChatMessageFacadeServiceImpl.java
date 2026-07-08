@@ -136,6 +136,7 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
             if (result <= 0) {
                 throw new BizException("创建聊天消息失败");
             }
+            chatSessionMapper.touchUpdatedAt(chatMessage.getSessionId());
             return chatMessage;
         } catch (JsonProcessingException e) {
             throw new BizException("创建聊天消息时发生序列化错误: " + e.getMessage());
@@ -201,6 +202,7 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
         if (result <= 0) {
             throw new BizException("追加聊天消息内容失败");
         }
+        chatSessionMapper.touchUpdatedAt(existingChatMessage.getSessionId());
 
         // 返回聊天消息ID
         return CreateChatMessageResponse.builder()
