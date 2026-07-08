@@ -1,0 +1,67 @@
+{
+  "markdown_path": "/Users/ryan/Downloads/前言.md",
+  "chunks_path": "docs/rag-evaluation/easy-langent-natural/easy-langent-chunks.jsonl",
+  "dataset_path": "docs/rag-evaluation/easy-langent-natural/easy-langent-natural-dataset.jsonl",
+  "results_path": "docs/rag-evaluation/easy-langent-natural/easy-langent-natural-results.jsonl",
+  "config": {
+    "embedding_model": "bge-m3",
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "generation_provider": "deepseek",
+    "generation_model": "deepseek-chat",
+    "raw_top_k": 20,
+    "final_top_k": 3,
+    "vector_weight": 0.7,
+    "lexical_weight": 0.3,
+    "max_chars": 1200,
+    "overlap_chars": 150,
+    "min_chars": 80
+  },
+  "chunks": 456,
+  "questions": 272,
+  "vector_metrics": {
+    "question_count": 272,
+    "hit_rate_at_1": 0.5551470588235294,
+    "recall_at_3": 0.7683823529411765,
+    "precision_at_3": 0.25980392156862775,
+    "mrr": 0.6513480392156865
+  },
+  "hybrid_metrics": {
+    "question_count": 272,
+    "hit_rate_at_1": 0.5147058823529411,
+    "recall_at_3": 0.7463235294117647,
+    "precision_at_3": 0.2573529411764709,
+    "mrr": 0.6182598039215685
+  },
+  "bge_metrics": {
+    "question_count": 272,
+    "hit_rate_at_1": 0.6102941176470589,
+    "recall_at_3": 0.8088235294117647,
+    "precision_at_3": 0.2769607843137256,
+    "mrr": 0.704656862745098
+  },
+  "bge_score_distribution": {
+    "positive": {
+      "count": 226,
+      "min": -1.9924259185791016,
+      "p10": 2.3989566564559937,
+      "p25": 3.335221827030182,
+      "p50": 4.610446453094482,
+      "p75": 5.71913206577301,
+      "p90": 6.935398578643799,
+      "max": 9.40311050415039,
+      "mean": 4.575025384075346
+    },
+    "negative": {
+      "count": 590,
+      "min": -3.151453733444214,
+      "p10": 0.3784487962722778,
+      "p25": 1.5709892213344574,
+      "p50": 2.793520450592041,
+      "p75": 3.7924570441246033,
+      "p90": 5.00433235168457,
+      "max": 7.952394485473633,
+      "mean": 2.6920715099863584
+    }
+  },
+  "elapsed_seconds": 1719.53
+}
