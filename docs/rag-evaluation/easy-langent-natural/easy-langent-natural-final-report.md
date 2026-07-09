@@ -22,6 +22,13 @@
 - Embedding 模型：`bge-m3`
 - Reranker 模型：`BAAI/bge-reranker-v2-m3`
 
+分块说明：
+
+- 本次评测使用 Python 脚本模拟业务代码 `MarkdownChunkingServiceImpl` 的 Markdown heading section chunking 逻辑。
+- 核心参数与业务配置保持一致：`maxChars=1200`、`overlapChars=150`。
+- 脚本通过识别 fenced code block，避免将代码块内的 `#` 注释误判为 Markdown 标题。
+- 本次评测没有直接调用 Java 业务分块服务，因此结论应理解为“按业务分块规则模拟”的离线评测结果。
+
 问题类型分布：
 
 | 类型 | 数量 |

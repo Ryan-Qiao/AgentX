@@ -15,7 +15,7 @@
 - 原始文档：`/Users/ryan/Downloads/前言.md`
 - chunk 数：456
 - 测试问题数：30
-- 分块策略：Markdown heading section chunking，排除代码块内 `#` 伪标题；超长 section 按 `maxChars=1200`、`overlapChars=150` 切子 chunk。
+- 分块策略：使用 Python 脚本模拟业务代码 `MarkdownChunkingServiceImpl` 的 Markdown heading section chunking 逻辑；核心参数与业务配置保持一致，`maxChars=1200`、`overlapChars=150`。脚本通过识别 fenced code block 避免将代码块内 `#` 注释误判为标题，但本次评测没有直接调用 Java 业务分块服务。
 - 问题构造：先从目标 chunk 中固定 `answer_source` 作为标准证据，再让模型改写为自然用户问题和参考答案。
 - 校验规则：问题不能出现“根据文档/原文/这段内容”等测试痕迹，且不能连续复用证据文本超过 10 个中文字符。
 
