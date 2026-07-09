@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Button, Checkbox, Input, InputNumber, List, Modal, Select, Slider, Switch, message } from "antd";
+import { Button, Checkbox, Input, InputNumber, List, Modal, Popconfirm, Select, Slider, Switch, message } from "antd";
 import TextArea from "antd/es/input/TextArea";
 import { DeleteOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
 import {
@@ -10,10 +10,14 @@ import {
   getOptionalTools,
   type ToolVO,
   type AgentMemoryVO,
+  type UserMemoryVO,
   createAgentMemory,
   deleteAgentMemory,
+  deleteUserMemory,
   getAgentMemories,
+  getUserMemories,
   updateAgentMemory,
+  updateUserMemory,
 } from "../../api/api.ts";
 import { useKnowledgeBases } from "../../hooks/useKnowledgeBases.ts";
 
@@ -57,6 +61,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
   // 工具列表
   const [tools, setTools] = useState<ToolVO[]>([]);
   const [agentMemories, setAgentMemories] = useState<AgentMemoryVO[]>([]);
+  const [userMemories, setUserMemories] = useState<UserMemoryVO[]>([]);
   const [memoryDraft, setMemoryDraft] = useState({
     title: "",
     content: "",
@@ -90,6 +95,11 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
     }
     const resp = await getAgentMemories(editingAgent.id);
     setAgentMemories(resp.agentMemories);
+  };
+
+  const refreshUserMemories = async () => {
+    const resp = await getUserMemories();
+    setUserMemories(resp.userMemories);
   };
 
   // 当编辑的 agent 变化时，更新表单数据
@@ -139,6 +149,16 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
       setAgentMemories([]);
     }
   }, [open, editingAgent?.id]);
+
+  useEffect(() => {
+    if (open) {
+      refreshUserMemories().catch((error) => {
+        console.error("获取 User Memory 失败:", error);
+      });
+    } else {
+      setUserMemories([]);
+    }
+  }, [open]);
 
   useEffect(() => {
     const temperatureMax = getTemperatureMax(formData.model);
@@ -630,8 +650,70 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
             )}
             {selectedKey === "memory" && (
               <div>
+                <div className="mb-6">
+                  <label className="block text-gray-700 font-medium mb-2">
+                    用户级记忆
+                  </label>
+                  <p className="text-sm text-gray-500 mb-4">
+                    这些记忆会被所有 Agent 共享，适合保存用户长期稳定的背景、偏好和沟通习惯。
+                  </p>
+                  <List
+                    dataSource={userMemories}
+                    locale={{ emptyText: "暂无用户级记忆" }}
+                    renderItem={(memoryItem) => (
+                      <List.Item
+                        actions={[
+                          <Switch
+                            key="enabled"
+                            checked={memoryItem.enabled}
+                            checkedChildren="启用"
+                            unCheckedChildren="禁用"
+                            onChange={async (checked) => {
+                              await updateUserMemory(memoryItem.id, {
+                                enabled: checked,
+                              });
+                              await refreshUserMemories();
+                            }}
+                          />,
+                          <Popconfirm
+                            key="delete"
+                            title="删除这条用户级记忆？"
+                            description="删除后所有 Agent 都不会再注入这条记忆。"
+                            okText="删除"
+                            cancelText="取消"
+                            okButtonProps={{ danger: true }}
+                            onConfirm={async () => {
+                              await deleteUserMemory(memoryItem.id);
+                              await refreshUserMemories();
+                              message.success("用户级记忆已删除");
+                            }}
+                          >
+                            <Button danger type="text" icon={<DeleteOutlined />} />
+                          </Popconfirm>,
+                        ]}
+                      >
+                        <List.Item.Meta
+                          title={
+                            <div className="flex items-center gap-2">
+                              <span>{memoryItem.title}</span>
+                              <span className="text-xs text-gray-400">
+                                {memoryItem.memoryType}
+                              </span>
+                            </div>
+                          }
+                          description={
+                            <div className="text-sm text-gray-600 whitespace-pre-wrap">
+                              {memoryItem.content}
+                            </div>
+                          }
+                        />
+                      </List.Item>
+                    )}
+                  />
+                </div>
+
                 {!isEditMode || !editingAgent ? (
-                  <div className="text-sm text-gray-500 py-8 text-center">
+                  <div className="text-sm text-gray-500 py-6 text-center border-t border-gray-100">
                     请先保存 Agent，再管理该 Agent 的长期记忆。
                   </div>
                 ) : (
@@ -731,17 +813,21 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
                                   await refreshAgentMemories();
                                 }}
                               />,
-                              <Button
+                              <Popconfirm
                                 key="delete"
-                                danger
-                                type="text"
-                                icon={<DeleteOutlined />}
-                                onClick={async () => {
+                                title="删除这条 Agent 记忆？"
+                                description="删除后当前 Agent 不会再注入这条记忆。"
+                                okText="删除"
+                                cancelText="取消"
+                                okButtonProps={{ danger: true }}
+                                onConfirm={async () => {
                                   await deleteAgentMemory(memoryItem.id);
                                   await refreshAgentMemories();
                                   message.success("Agent 记忆已删除");
                                 }}
-                              />,
+                              >
+                                <Button danger type="text" icon={<DeleteOutlined />} />
+                              </Popconfirm>,
                             ]}
                           >
                             <List.Item.Meta

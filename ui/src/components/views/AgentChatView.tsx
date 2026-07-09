@@ -21,6 +21,8 @@ import EmptyAgentChatView from "./agentChatView/EmptyAgentChatView.tsx";
 import type { ChatMessageVO, SseMessage, SseMessageType } from "../../types";
 import { getAgentEmoji } from "../../utils";
 
+const MIN_AGENT_STATUS_VISIBLE_MS = 500;
+
 const AgentChatView: React.FC = () => {
   const { chatSessionId } = useParams<{ chatSessionId: string }>();
   const navigate = useNavigate();
@@ -43,16 +45,29 @@ const AgentChatView: React.FC = () => {
   // 流式输出状态（后端响应完成后一次性下发，前端做“假流式”逐字打印）
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [displayAgentStatus, setDisplayAgentStatus] = useState<boolean>(false);
+  const [agentStatusText, setAgentStatusText] = useState("");
+  const [agentStatusType, setAgentStatusType] = useState<
+    SseMessageType | undefined
+  >(undefined);
 
   // 逐字打印动画状态
   const charBufferRef = useRef<string[]>([]);
-  const rafIdRef = useRef<number | null>(null);
-  const lastFrameTimeRef = useRef<number>(0);
+  const typewriterTimerRef = useRef<number | null>(null);
   const pendingFinalMessageRef = useRef<ChatMessageVO | null>(null);
   const initMessageSentRef = useRef<string | null>(null);
+  const activeChatSessionIdRef = useRef<string | undefined>(chatSessionId);
+  const currentRunHasAssistantContentRef = useRef(false);
+  const agentStatusShownAtRef = useRef<number | null>(null);
+  const typewriterStartTimeoutRef = useRef<number | null>(null);
 
   const addMessage = (message: ChatMessageVO) => {
-    setMessages((prevMessages) => [...prevMessages, message]);
+    setMessages((prevMessages) => {
+      if (prevMessages.some((item) => item.id === message.id)) {
+        return prevMessages;
+      }
+      return [...prevMessages, message];
+    });
   };
 
   const replaceMessage = (messageId: string, message: ChatMessageVO) => {
@@ -69,17 +84,18 @@ const AgentChatView: React.FC = () => {
 
   // 启动逐字打印动画消费器
   const startTypewriter = useCallback(() => {
-    if (rafIdRef.current !== null) return;
+    if (typewriterTimerRef.current !== null) return;
 
-    const tick = (now: number) => {
+    const tick = () => {
       const buffer = charBufferRef.current;
 
       if (buffer.length === 0) {
-        rafIdRef.current = null;
+        typewriterTimerRef.current = null;
         // 打印完成：切换为正式消息
         const pending = pendingFinalMessageRef.current;
         if (pending) {
           pendingFinalMessageRef.current = null;
+          currentRunHasAssistantContentRef.current = false;
           addMessage(pending);
           setStreamingContent("");
           setIsStreaming(false);
@@ -87,53 +103,84 @@ const AgentChatView: React.FC = () => {
         return;
       }
 
-      // 节奏控制：每帧间隔 ~16ms（60fps），每帧消费 charsPerFrame 个字符
-      if (now - lastFrameTimeRef.current >= 16) {
-        const remaining = buffer.length;
-        // 自适应速率：内容越长越快，避免过于漫长
-        let charsPerFrame: number;
-        if (remaining > 800) {
-          charsPerFrame = 6; // ~360 字/秒
-        } else if (remaining > 300) {
-          charsPerFrame = 4; // ~240 字/秒
-        } else if (remaining > 100) {
-          charsPerFrame = 2; // ~120 字/秒
-        } else {
-          charsPerFrame = 1; // ~60 字/秒，丝滑逐字
-        }
-
-        const chunk = buffer.splice(0, charsPerFrame).join("");
-        if (chunk) {
-          setStreamingContent((prev) => prev + chunk);
-        }
-        lastFrameTimeRef.current = now;
+      const remaining = buffer.length;
+      const interval = remaining > 300 ? 12 : remaining > 120 ? 20 : remaining > 40 ? 25 : 40;
+      const char = buffer.shift();
+      if (char) {
+        setStreamingContent((prev) => prev + char);
       }
-
-      rafIdRef.current = requestAnimationFrame(tick);
+      typewriterTimerRef.current = window.setTimeout(tick, interval);
     };
 
-    rafIdRef.current = requestAnimationFrame(tick);
+    typewriterTimerRef.current = window.setTimeout(tick, 100);
   }, []);
 
   // 重置打印动画
   const resetTypewriter = useCallback(() => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = null;
+    if (typewriterStartTimeoutRef.current !== null) {
+      window.clearTimeout(typewriterStartTimeoutRef.current);
+      typewriterStartTimeoutRef.current = null;
+    }
+    if (typewriterTimerRef.current !== null) {
+      window.clearTimeout(typewriterTimerRef.current);
+      typewriterTimerRef.current = null;
     }
     charBufferRef.current = [];
     pendingFinalMessageRef.current = null;
-    lastFrameTimeRef.current = 0;
   }, []);
 
-  const showAssistantWaiting = useCallback(() => {
-    resetTypewriter();
+  const showAgentStatus = useCallback((type: SseMessageType, text: string) => {
+    setIsStreaming(false);
     setStreamingContent("");
-    setIsStreaming(true);
+    setDisplayAgentStatus(true);
+    setAgentStatusText(text);
+    setAgentStatusType(type);
+    agentStatusShownAtRef.current = Date.now();
+  }, []);
+
+  const resetAssistantRuntimeState = useCallback(() => {
+    resetTypewriter();
+    currentRunHasAssistantContentRef.current = false;
+    agentStatusShownAtRef.current = null;
+    setStreamingContent("");
+    setIsStreaming(false);
     setDisplayAgentStatus(false);
     setAgentStatusText("");
     setAgentStatusType(undefined);
   }, [resetTypewriter]);
+
+  const showAssistantWaiting = useCallback(() => {
+    resetAssistantRuntimeState();
+    showAgentStatus("AI_THINKING", "正在理解你的问题");
+  }, [resetAssistantRuntimeState, showAgentStatus]);
+
+  const startTypewriterAfterStatusDelay = useCallback(() => {
+    const shownAt = agentStatusShownAtRef.current;
+    const elapsed = shownAt == null ? MIN_AGENT_STATUS_VISIBLE_MS : Date.now() - shownAt;
+    const delay = Math.max(0, MIN_AGENT_STATUS_VISIBLE_MS - elapsed);
+
+    const start = () => {
+      typewriterStartTimeoutRef.current = null;
+      if (!pendingFinalMessageRef.current) {
+        return;
+      }
+      setDisplayAgentStatus(false);
+      setAgentStatusText("");
+      setAgentStatusType(undefined);
+      setStreamingContent("");
+      setIsStreaming(true);
+      startTypewriter();
+    };
+
+    if (delay > 0) {
+      setIsStreaming(false);
+      setStreamingContent("");
+      typewriterStartTimeoutRef.current = window.setTimeout(start, delay);
+      return;
+    }
+
+    start();
+  }, [startTypewriter]);
 
   const [agentId, setAgentId] = useState<string>("");
 
@@ -156,22 +203,42 @@ const AgentChatView: React.FC = () => {
     setUserMemories(resp.userMemories.filter((memory) => memory.enabled));
   }, []);
 
-  const getChatMessages = useCallback(async () => {
-    if (!chatSessionId) {
+  const getChatMessages = useCallback(async (targetSessionId = chatSessionId) => {
+    if (!targetSessionId) {
       return;
     }
-    const resp = await getChatMessagesBySessionId(chatSessionId);
+    const resp = await getChatMessagesBySessionId(targetSessionId);
     const isSendingInitMessage = Boolean(state?.init && state.initMessage);
-    if (!(isSendingInitMessage && resp.chatMessages.length === 0)) {
-      setMessages(resp.chatMessages);
+    if (
+      activeChatSessionIdRef.current === targetSessionId &&
+      !(isSendingInitMessage && resp.chatMessages.length === 0)
+    ) {
+      const isTypewriterActive =
+        typewriterStartTimeoutRef.current !== null ||
+        typewriterTimerRef.current !== null ||
+        charBufferRef.current.length > 0 ||
+        pendingFinalMessageRef.current !== null;
+      const pendingAssistantMessageId = pendingFinalMessageRef.current?.id;
+      const chatMessages = isTypewriterActive && pendingAssistantMessageId
+        ? resp.chatMessages.filter((message) => message.id !== pendingAssistantMessageId)
+        : resp.chatMessages;
+
+      setMessages(chatMessages);
+
+      const latestMessage = chatMessages[chatMessages.length - 1];
+      if (latestMessage?.role === "assistant" && !isTypewriterActive) {
+        resetAssistantRuntimeState();
+      }
     }
 
     const fetchData = async () => {
-      const resp = await getChatSession(chatSessionId);
-      setAgentId(resp.chatSession.agentId ?? "");
+      const resp = await getChatSession(targetSessionId);
+      if (activeChatSessionIdRef.current === targetSessionId) {
+        setAgentId(resp.chatSession.agentId ?? "");
+      }
     };
     fetchData().then();
-  }, [chatSessionId, state]);
+  }, [chatSessionId, resetAssistantRuntimeState, state]);
 
   useEffect(() => {
     if (!chatSessionId) {
@@ -179,6 +246,11 @@ const AgentChatView: React.FC = () => {
     }
     getChatMessages().then();
   }, [chatSessionId, getChatMessages]);
+
+  useEffect(() => {
+    activeChatSessionIdRef.current = chatSessionId;
+    resetAssistantRuntimeState();
+  }, [chatSessionId, resetAssistantRuntimeState]);
 
   useEffect(() => {
     refreshAgentMemories().catch((error) => {
@@ -271,12 +343,11 @@ const AgentChatView: React.FC = () => {
       } catch (error) {
         console.error("发送聊天消息失败:", error);
         removeMessage(optimisticId);
-        setIsStreaming(false);
-        setStreamingContent("");
+        resetAssistantRuntimeState();
         antdMessage.error("消息发送失败，请重试");
       }
     },
-    [refreshChatSessions, showAssistantWaiting],
+    [refreshChatSessions, resetAssistantRuntimeState, showAssistantWaiting],
   );
 
   const handleSendMessage = async (value: string | { text: string }) => {
@@ -323,12 +394,6 @@ const AgentChatView: React.FC = () => {
     }
   };
 
-  const [displayAgentStatus, setDisplayAgentStatus] = useState<boolean>(false);
-  const [agentStatusText, setAgentStatusText] = useState("");
-  const [agentStatusType, setAgentStatusType] = useState<
-    SseMessageType | undefined
-  >(undefined);
-
   useEffect(() => {
     if (!chatSessionId || !state?.init || !state.initMessage) {
       return;
@@ -355,17 +420,27 @@ const AgentChatView: React.FC = () => {
     if (!chatSessionId) {
       return;
     }
+    const connectedChatSessionId = chatSessionId;
     const es = new EventSource(
-      `http://localhost:8080/sse/connect/${chatSessionId}`,
+      `http://localhost:8080/sse/connect/${connectedChatSessionId}`,
     );
     es.onmessage = (event) => {
       console.log("Received message:", event.data);
     };
     es.onerror = (error) => {
       console.error("SSE error:", error);
+      if (
+        activeChatSessionIdRef.current === connectedChatSessionId &&
+        !currentRunHasAssistantContentRef.current
+      ) {
+        void getChatMessages(connectedChatSessionId);
+      }
     };
 
     es.addEventListener("message", (event) => {
+      if (activeChatSessionIdRef.current !== connectedChatSessionId) {
+        return;
+      }
       const message = JSON.parse(event.data) as SseMessage;
 
       if (message.type === "AI_STREAMING_CONTENT") {
@@ -395,11 +470,10 @@ const AgentChatView: React.FC = () => {
           return;
         }
 
-        // 先重置状态、隐藏 agent 状态、启用打印区域
+        // 先重置旧动画，新的回复会在思考状态至少展示一小段时间后开始打印
         resetTypewriter();
         setStreamingContent("");
-        setIsStreaming(true);
-        setDisplayAgentStatus(false);
+        setIsStreaming(false);
 
         if (!content) {
           // 空内容直接提交
@@ -409,31 +483,23 @@ const AgentChatView: React.FC = () => {
         }
 
         // 入队 + 记录待提交消息 + 启动动画
+        currentRunHasAssistantContentRef.current = true;
         charBufferRef.current = Array.from(content);
         pendingFinalMessageRef.current = finalMsg;
-        startTypewriter();
+        startTypewriterAfterStatusDelay();
       } else if (message.type === "AI_PLANNING") {
-        setIsStreaming(false);
-        setStreamingContent("");
-        setDisplayAgentStatus(true);
-        setAgentStatusText(message.payload.statusText);
-        setAgentStatusType("AI_PLANNING");
+        showAgentStatus("AI_PLANNING", message.payload.statusText);
       } else if (message.type === "AI_THINKING") {
-        setIsStreaming(false);
-        setStreamingContent("");
-        setDisplayAgentStatus(true);
-        setAgentStatusText(message.payload.statusText);
-        setAgentStatusType("AI_THINKING");
+        showAgentStatus("AI_THINKING", message.payload.statusText);
       } else if (message.type === "AI_EXECUTING") {
-        setIsStreaming(false);
-        setStreamingContent("");
-        setDisplayAgentStatus(true);
-        setAgentStatusText(message.payload.statusText);
-        setAgentStatusType("AI_EXECUTING");
+        showAgentStatus("AI_EXECUTING", message.payload.statusText);
       } else if (message.type === "AI_DONE") {
-        setDisplayAgentStatus(false);
-        setAgentStatusText("");
-        setAgentStatusType(undefined);
+        if (currentRunHasAssistantContentRef.current) {
+          return;
+        } else {
+          resetAssistantRuntimeState();
+          void getChatMessages(connectedChatSessionId);
+        }
       } else {
         throw new Error(`Unknown message type: ${message.type}`);
       }
@@ -446,9 +512,19 @@ const AgentChatView: React.FC = () => {
     return () => {
       console.log("Closing SSE connection.");
       es.close();
-      resetTypewriter();
+      if (activeChatSessionIdRef.current === connectedChatSessionId) {
+        resetAssistantRuntimeState();
+      }
     };
-  }, [chatSessionId, refreshChatSessions, startTypewriter, resetTypewriter]);
+  }, [
+    chatSessionId,
+    getChatMessages,
+    refreshChatSessions,
+    resetAssistantRuntimeState,
+    resetTypewriter,
+    showAgentStatus,
+    startTypewriterAfterStatusDelay,
+  ]);
 
   if (!chatSessionId) {
     return (

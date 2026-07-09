@@ -16,6 +16,11 @@ public interface UserMemoryMapper {
 
     List<UserMemory> selectEnabledGlobal(@Param("limit") int limit);
 
+    int countExactDuplicate(
+            @Param("title") String title,
+            @Param("content") String content
+    );
+
     int markUsedByIds(@Param("ids") List<String> ids);
 
     int updateById(UserMemory userMemory);

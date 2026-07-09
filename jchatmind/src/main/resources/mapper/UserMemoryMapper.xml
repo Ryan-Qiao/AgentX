@@ -84,6 +84,14 @@
         LIMIT #{limit}
     </select>
 
+    <select id="countExactDuplicate" resultType="int">
+        SELECT COUNT(*)
+        FROM user_memory
+        WHERE user_id IS NULL
+          AND title = #{title}
+          AND content = #{content}
+    </select>
+
     <update id="markUsedByIds">
         UPDATE user_memory
         SET last_used_at = NOW(),
