@@ -3,6 +3,7 @@ package com.kama.jchatmind.service.impl;
 import com.kama.jchatmind.mapper.ChunkBgeM3Mapper;
 import com.kama.jchatmind.model.rag.RagSearchResponse;
 import com.kama.jchatmind.model.rag.RagSearchResult;
+import com.kama.jchatmind.rag.BgeRerankerClient;
 import com.kama.jchatmind.rag.RagReranker;
 import com.kama.jchatmind.rag.RagRetrievalPolicy;
 import com.kama.jchatmind.service.RagService;
@@ -26,8 +27,9 @@ public class RagServiceImpl implements RagService {
     private final ChunkBgeM3Mapper chunkBgeM3Mapper;
     private final RagRetrievalPolicy ragRetrievalPolicy;
     private final RagReranker ragReranker;
+    private final BgeRerankerClient bgeRerankerClient;
 
-    @Value("${rag.retrieval.raw-top-k:10}")
+    @Value("${rag.retrieval.raw-top-k:20}")
     private int rawTopK;
 
     @Value("${rag.retrieval.final-top-k:3}")
@@ -45,22 +47,39 @@ public class RagServiceImpl implements RagService {
     @Value("${rag.rerank.enabled:true}")
     private boolean rerankEnabled;
 
+    @Value("${rag.rerank.strategy:bge-reranker}")
+    private String rerankStrategy;
+
     @Value("${rag.rerank.vector-weight:0.70}")
     private double vectorWeight;
 
     @Value("${rag.rerank.lexical-weight:0.30}")
     private double lexicalWeight;
 
+    @Value("${rag.rerank.bge.endpoint:http://localhost:8001/rerank}")
+    private String bgeRerankerEndpoint;
+
+    @Value("${rag.rerank.bge.model:BAAI/bge-reranker-v2-m3}")
+    private String bgeRerankerModel;
+
+    @Value("${rag.rerank.bge.timeout-ms:3000}")
+    private int bgeRerankerTimeoutMs;
+
+    @Value("${rag.rerank.fallback-enabled:true}")
+    private boolean rerankFallbackEnabled;
+
     public RagServiceImpl(
             WebClient.Builder builder,
             ChunkBgeM3Mapper chunkBgeM3Mapper,
             RagRetrievalPolicy ragRetrievalPolicy,
-            RagReranker ragReranker
+            RagReranker ragReranker,
+            BgeRerankerClient bgeRerankerClient
     ) {
         this.webClient = builder.baseUrl("http://localhost:11434").build();
         this.chunkBgeM3Mapper = chunkBgeM3Mapper;
         this.ragRetrievalPolicy = ragRetrievalPolicy;
         this.ragReranker = ragReranker;
+        this.bgeRerankerClient = bgeRerankerClient;
     }
 
     @Data
@@ -92,7 +111,7 @@ public class RagServiceImpl implements RagService {
         String queryEmbedding = toPgVector(doEmbed(query));
         List<RagSearchResult> rawResults = chunkBgeM3Mapper.similaritySearchDetailed(kbId, queryEmbedding, rawTopK);
         if (rerankEnabled) {
-            rawResults = ragReranker.rerank(query, rawResults, vectorWeight, lexicalWeight);
+            rawResults = rerank(query, rawResults);
         }
         List<RagSearchResult> processedResults = ragRetrievalPolicy.apply(
                 rawResults,
@@ -149,6 +168,7 @@ public class RagServiceImpl implements RagService {
                 finalTopK={}
                 maxDistance={}
                 rerankEnabled={}
+                rerankStrategy={}
                 results:
                 {}
                 ===================================
@@ -159,7 +179,42 @@ public class RagServiceImpl implements RagService {
                 response.getFinalTopK(),
                 response.getMaxDistance(),
                 rerankEnabled,
+                rerankStrategy,
                 results);
+    }
+
+    private List<RagSearchResult> rerank(String query, List<RagSearchResult> rawResults) {
+        if ("none".equalsIgnoreCase(rerankStrategy)) {
+            return rawResults;
+        }
+
+        if ("hybrid".equalsIgnoreCase(rerankStrategy)) {
+            return ragReranker.rerank(query, rawResults, vectorWeight, lexicalWeight);
+        }
+
+        if ("bge-reranker".equalsIgnoreCase(rerankStrategy)) {
+            try {
+                return bgeRerankerClient.rerank(
+                        query,
+                        rawResults,
+                        bgeRerankerEndpoint,
+                        bgeRerankerModel,
+                        bgeRerankerTimeoutMs
+                );
+            } catch (Exception e) {
+                if (!rerankFallbackEnabled) {
+                    throw e;
+                }
+                log.warn("BGE reranker failed, fallback to hybrid rerank. endpoint={}, model={}",
+                        bgeRerankerEndpoint,
+                        bgeRerankerModel,
+                        e);
+                return ragReranker.rerank(query, rawResults, vectorWeight, lexicalWeight);
+            }
+        }
+
+        log.warn("Unknown RAG rerank strategy: {}, fallback to hybrid rerank", rerankStrategy);
+        return ragReranker.rerank(query, rawResults, vectorWeight, lexicalWeight);
     }
 
     private String toPgVector(float[] v) {
