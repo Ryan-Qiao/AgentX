@@ -13,6 +13,7 @@ public class RagSearchResponse {
     private Integer rawTopK;
     private Integer finalTopK;
     private Double maxDistance;
+    private Double minRerankScore;
     private List<RagSearchResult> results;
 
     public List<RagSearchResult> selectedResults() {

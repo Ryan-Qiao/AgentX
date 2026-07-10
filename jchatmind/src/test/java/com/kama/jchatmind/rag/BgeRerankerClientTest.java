@@ -39,7 +39,7 @@ class BgeRerankerClientTest {
         });
         server.start();
 
-        BgeRerankerClient client = new BgeRerankerClient(WebClient.builder(), new RagReranker());
+        BgeRerankerClient client = new BgeRerankerClient(WebClient.builder());
         String endpoint = "http://localhost:%d/rerank".formatted(server.getAddress().getPort());
 
         List<RagSearchResult> reranked = client.rerank(
@@ -55,7 +55,7 @@ class BgeRerankerClientTest {
 
         assertThat(reranked).extracting(RagSearchResult::getChunkId).containsExactly("c2", "c1");
         assertThat(reranked.get(0).getRerankScore()).isEqualTo(0.93);
-        assertThat(reranked.get(0).getLexicalScore()).isGreaterThan(0.0);
+        assertThat(reranked.get(0).getLexicalScore()).isNull();
     }
 
     private RagSearchResult result(String chunkId, String content) {

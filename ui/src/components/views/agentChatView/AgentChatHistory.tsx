@@ -6,6 +6,8 @@ import {
   RobotOutlined,
   DownOutlined,
   RightOutlined,
+  CodeOutlined,
+  FileTextOutlined,
 } from "@ant-design/icons";
 import type { ChatMessageVO, SseMessageType, ToolResponse } from "../../../types";
 
@@ -52,41 +54,83 @@ const parseKnowledgeToolResponse = (responseData: string): KnowledgeHit[] => {
   }));
 };
 
+const decodeToolResponseData = (responseData: string) => {
+  try {
+    const parsed = JSON.parse(responseData);
+    return typeof parsed === "string" ? parsed : responseData;
+  } catch {
+    return responseData;
+  }
+};
+
+const extractKnowledgeQuery = (responseData: string) =>
+  responseData.match(/检索问题：([^\n]*)/)?.[1]?.trim() ?? "";
+
+const createKnowledgePreview = (content: string, maxLength = 180) => {
+  const normalized = content
+    .replace(/\f/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength)}...`
+    : normalized;
+};
+
 const ToolResponseDisplay: React.FC<{ toolResponse: ToolResponse }> = ({
   toolResponse,
 }) => {
   const [expanded, setExpanded] = useState(false);
-  
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+  const isKnowledgeTool = toolResponse.name === "KnowledgeTool";
+  const normalizedResponseData = decodeToolResponseData(toolResponse.responseData);
+  const knowledgeQuery = isKnowledgeTool
+    ? extractKnowledgeQuery(normalizedResponseData)
+    : "";
+  const knowledgeHasNoResult =
+    isKnowledgeTool &&
+    normalizedResponseData.includes("知识库中没有找到与当前问题足够相关的内容");
+  const knowledgeHits = isKnowledgeTool
+    ? parseKnowledgeToolResponse(normalizedResponseData)
+    : [];
+  const knowledgeSourceCount = new Set(
+    knowledgeHits.map((hit) => hit.documentTitle),
+  ).size;
+
   let parsedData: unknown = null;
   let isJson = false;
   let dataPreview = "";
-  const knowledgeHits =
-    toolResponse.name === "KnowledgeTool"
-      ? parseKnowledgeToolResponse(toolResponse.responseData)
-      : [];
-  
-  try {
-    parsedData = JSON.parse(toolResponse.responseData);
-    isJson = true;
-    const jsonStr = JSON.stringify(parsedData);
-    dataPreview = jsonStr.length > 100 ? jsonStr.slice(0, 100) + "..." : jsonStr;
-  } catch {
-    if (knowledgeHits.length > 0) {
-      dataPreview = `命中 ${knowledgeHits.length} 个片段：${knowledgeHits
-        .map((hit) => hit.documentTitle)
-        .join("、")}`;
+
+  if (isKnowledgeTool) {
+    if (knowledgeHasNoResult) {
+      dataPreview = knowledgeQuery
+        ? `“${knowledgeQuery}” · 未找到相关内容`
+        : "未找到相关内容";
+    } else if (knowledgeHits.length > 0) {
+      dataPreview = `${knowledgeQuery ? `“${knowledgeQuery}” · ` : ""}命中 ${knowledgeHits.length} 个片段 · ${knowledgeSourceCount} 个文档`;
     } else {
-      dataPreview = toolResponse.responseData.length > 100 
-        ? toolResponse.responseData.slice(0, 100) + "..." 
-        : toolResponse.responseData;
+      dataPreview = createKnowledgePreview(normalizedResponseData, 100);
+    }
+  } else {
+    try {
+      parsedData = JSON.parse(normalizedResponseData);
+      isJson = true;
+      const jsonStr = JSON.stringify(parsedData);
+      dataPreview = jsonStr.length > 100 ? `${jsonStr.slice(0, 100)}...` : jsonStr;
+    } catch {
+      dataPreview =
+        normalizedResponseData.length > 100
+          ? `${normalizedResponseData.slice(0, 100)}...`
+          : normalizedResponseData;
     }
   }
 
   return (
     <div className="my-1.5 text-xs">
-      <div 
-        className="flex items-center gap-2 text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors"
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 text-left text-zinc-500 transition-colors hover:text-zinc-700"
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
       >
         {expanded ? (
           <DownOutlined className="text-zinc-400" />
@@ -94,43 +138,74 @@ const ToolResponseDisplay: React.FC<{ toolResponse: ToolResponse }> = ({
           <RightOutlined className="text-zinc-400" />
         )}
         <CheckCircleOutlined className="text-emerald-500" />
-        <span className="font-mono text-emerald-600">{toolResponse.name}</span>
+        <span className="font-medium text-emerald-600">
+          {isKnowledgeTool ? "知识库检索" : toolResponse.name}
+        </span>
         <span className="text-zinc-300">·</span>
         <span className="text-zinc-400 truncate flex-1">{dataPreview}</span>
-      </div>
+      </button>
       {expanded && (
-        <div className="ml-5 mt-1.5 p-2 bg-zinc-50 rounded border border-zinc-200">
-          <div className="text-xs text-zinc-600 font-mono">
-            {knowledgeHits.length > 0 ? (
-              <div className="space-y-2 font-sans">
-                {knowledgeHits.map((hit) => (
-                  <div
-                    key={`${hit.rank}-${hit.chunkId}`}
-                    className="rounded border border-zinc-200 bg-white p-2"
-                  >
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-zinc-700">
-                      <span className="font-semibold">[{hit.rank}] {hit.documentTitle}</span>
-                      <span className="text-zinc-300">·</span>
-                      <span>distance {hit.distance}</span>
-                      <span>score {hit.score}</span>
-                      <span>rerank {hit.rerankScore}</span>
-                    </div>
-                    <div className="mt-1 text-[11px] text-zinc-400 break-all">
-                      {hit.chunkId}
-                    </div>
-                    <div className="mt-2 whitespace-pre-wrap break-words leading-relaxed text-zinc-600">
-                      {hit.content}
-                    </div>
+        <div className="ml-6 mt-2 border-l border-zinc-200 pl-4">
+          <div className="text-xs text-zinc-600">
+            {isKnowledgeTool ? (
+              <div>
+                {knowledgeHasNoResult ? (
+                  <div className="py-1 text-zinc-500">
+                    知识库中没有找到足够相关的内容。
                   </div>
-                ))}
+                ) : knowledgeHits.length > 0 ? (
+                  <div className="divide-y divide-zinc-100">
+                    {knowledgeHits.map((hit) => (
+                      <div
+                        key={`${hit.rank}-${hit.chunkId}`}
+                        className="py-2.5 first:pt-0"
+                      >
+                        <div className="flex items-center gap-2 text-zinc-700">
+                          <span className="w-4 shrink-0 text-right text-zinc-400">
+                            {hit.rank}.
+                          </span>
+                          <FileTextOutlined className="text-zinc-400" />
+                          <span className="truncate font-medium">
+                            {hit.documentTitle}
+                          </span>
+                        </div>
+                        <p className="ml-6 mt-1.5 leading-5 text-zinc-500">
+                          {createKnowledgePreview(hit.content)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-1 text-zinc-500">
+                    {createKnowledgePreview(normalizedResponseData, 240)}
+                  </div>
+                )}
+
+                <div className="mt-2 border-t border-zinc-100 pt-2">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-zinc-400 transition-colors hover:text-zinc-600"
+                    onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+                    aria-expanded={showTechnicalDetails}
+                  >
+                    <CodeOutlined />
+                    技术详情
+                    {showTechnicalDetails ? <DownOutlined /> : <RightOutlined />}
+                  </button>
+                  {showTechnicalDetails && (
+                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words bg-zinc-50 p-2 font-mono text-[11px] leading-5 text-zinc-500">
+                      {normalizedResponseData}
+                    </pre>
+                  )}
+                </div>
               </div>
             ) : isJson ? (
-              <pre className="whitespace-pre-wrap break-words overflow-x-auto max-h-60 overflow-y-auto">
+              <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words bg-zinc-50 p-2 font-mono">
                 {JSON.stringify(parsedData, null, 2)}
               </pre>
             ) : (
               <div className="whitespace-pre-wrap break-words">
-                {toolResponse.responseData}
+                {normalizedResponseData}
               </div>
             )}
           </div>

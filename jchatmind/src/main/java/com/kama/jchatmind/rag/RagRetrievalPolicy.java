@@ -17,6 +17,7 @@ public class RagRetrievalPolicy {
             List<RagSearchResult> rawResults,
             int finalTopK,
             Double maxDistance,
+            Double minRerankScore,
             int maxChunksPerDocument
     ) {
         List<RagSearchResult> processed = new ArrayList<>();
@@ -26,7 +27,14 @@ public class RagRetrievalPolicy {
 
         for (RagSearchResult rawResult : rawResults) {
             RagSearchResult.RagSearchResultBuilder builder = rawResult.toBuilder();
-            String filterReason = filterReason(rawResult, seenContent, documentCounts, maxDistance, maxChunksPerDocument);
+            String filterReason = filterReason(
+                    rawResult,
+                    seenContent,
+                    documentCounts,
+                    maxDistance,
+                    minRerankScore,
+                    maxChunksPerDocument
+            );
 
             if (filterReason == null && selectedRank <= finalTopK) {
                 builder.filtered(false).filterReason(null).rank(selectedRank);
@@ -50,10 +58,15 @@ public class RagRetrievalPolicy {
             Set<String> seenContent,
             Map<String, Integer> documentCounts,
             Double maxDistance,
+            Double minRerankScore,
             int maxChunksPerDocument
     ) {
         if (!StringUtils.hasText(result.getContent())) {
             return "empty_content";
+        }
+        if (minRerankScore != null
+                && (result.getRerankScore() == null || result.getRerankScore() < minRerankScore)) {
+            return "rerank_score_lt_min";
         }
         if (maxDistance != null && result.getDistance() != null && result.getDistance() > maxDistance) {
             return "distance_gt_max";

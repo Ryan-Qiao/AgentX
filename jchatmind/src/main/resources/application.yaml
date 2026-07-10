@@ -59,15 +59,11 @@ rag:
     raw-top-k: ${RAG_RETRIEVAL_RAW_TOP_K:20}
     final-top-k: ${RAG_RETRIEVAL_FINAL_TOP_K:3}
     max-distance: ${RAG_RETRIEVAL_MAX_DISTANCE:}
-    max-chunks-per-document: ${RAG_RETRIEVAL_MAX_CHUNKS_PER_DOCUMENT:2}
+    min-rerank-score: ${RAG_RETRIEVAL_MIN_RERANK_SCORE:1.0}
+    max-chunks-per-document: ${RAG_RETRIEVAL_MAX_CHUNKS_PER_DOCUMENT:3}
     debug-enabled: ${RAG_RETRIEVAL_DEBUG_ENABLED:true}
   rerank:
-    enabled: ${RAG_RERANK_ENABLED:true}
-    strategy: ${RAG_RERANK_STRATEGY:bge-reranker}
-    vector-weight: ${RAG_RERANK_VECTOR_WEIGHT:0.70}
-    lexical-weight: ${RAG_RERANK_LEXICAL_WEIGHT:0.30}
-    fallback-enabled: ${RAG_RERANK_FALLBACK_ENABLED:true}
     bge:
       endpoint: ${RAG_RERANK_BGE_ENDPOINT:http://localhost:8001/rerank}
       model: ${RAG_RERANK_BGE_MODEL:BAAI/bge-reranker-v2-m3}
-      timeout-ms: ${RAG_RERANK_BGE_TIMEOUT_MS:3000}
+      timeout-ms: ${RAG_RERANK_BGE_TIMEOUT_MS:15000}

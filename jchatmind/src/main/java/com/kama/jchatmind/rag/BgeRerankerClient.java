@@ -21,11 +21,9 @@ import java.util.Map;
 @Slf4j
 public class BgeRerankerClient {
     private final WebClient.Builder webClientBuilder;
-    private final RagReranker hybridReranker;
 
-    public BgeRerankerClient(WebClient.Builder webClientBuilder, RagReranker hybridReranker) {
+    public BgeRerankerClient(WebClient.Builder webClientBuilder) {
         this.webClientBuilder = webClientBuilder;
-        this.hybridReranker = hybridReranker;
     }
 
     public List<RagSearchResult> rerank(
@@ -59,7 +57,6 @@ public class BgeRerankerClient {
         for (int i = 0; i < candidates.size(); i++) {
             RagSearchResult candidate = candidates.get(i);
             reranked.add(candidate.toBuilder()
-                    .lexicalScore(hybridReranker.lexicalScore(query, passageText(candidate)))
                     .rerankScore(scores.get(i))
                     .build());
         }

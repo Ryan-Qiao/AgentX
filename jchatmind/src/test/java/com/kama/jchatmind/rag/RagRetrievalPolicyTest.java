@@ -19,15 +19,17 @@ class RagRetrievalPolicyTest {
                         result("c4", "d2", "alpha   content", 0.15),
                         result("c5", "d3", "", 0.05),
                         result("c6", "d4", "delta content", 0.90),
-                        result("c7", "d5", "epsilon content", 0.25)
+                        result("c7", "d5", "epsilon content", 0.25),
+                        result("c8", "d6", "low rerank content", 0.10, 0.90)
                 ),
                 2,
                 0.50,
+                1.0,
                 2
         );
 
         assertThat(results).extracting(RagSearchResult::getChunkId)
-                .containsExactly("c1", "c2", "c3", "c4", "c5", "c6", "c7");
+                .containsExactly("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8");
 
         assertThat(results.get(0).getFiltered()).isFalse();
         assertThat(results.get(0).getRank()).isEqualTo(1);
@@ -44,9 +46,21 @@ class RagRetrievalPolicyTest {
         assertThat(results.get(5).getFilterReason()).isEqualTo("distance_gt_max");
         assertThat(results.get(6).getFiltered()).isTrue();
         assertThat(results.get(6).getFilterReason()).isEqualTo("exceeds_final_top_k");
+        assertThat(results.get(7).getFiltered()).isTrue();
+        assertThat(results.get(7).getFilterReason()).isEqualTo("rerank_score_lt_min");
     }
 
     private RagSearchResult result(String chunkId, String documentId, String content, Double distance) {
+        return result(chunkId, documentId, content, distance, 2.0);
+    }
+
+    private RagSearchResult result(
+            String chunkId,
+            String documentId,
+            String content,
+            Double distance,
+            Double rerankScore
+    ) {
         return RagSearchResult.builder()
                 .chunkId(chunkId)
                 .documentId(documentId)
@@ -54,6 +68,7 @@ class RagRetrievalPolicyTest {
                 .content(content)
                 .distance(distance)
                 .score(distance == null ? null : 1.0 / (1.0 + distance))
+                .rerankScore(rerankScore)
                 .build();
     }
 }

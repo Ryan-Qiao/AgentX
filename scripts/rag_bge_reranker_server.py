@@ -22,6 +22,7 @@ import argparse
 import json
 import logging
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Lock
 from typing import Any
 
 
@@ -41,6 +42,7 @@ class RerankerState:
         self.batch_size = batch_size
         self.max_length = max_length
         self._reranker = None
+        self._inference_lock = Lock()
 
     @property
     def reranker(self):
@@ -59,18 +61,21 @@ class RerankerState:
         return self._reranker
 
     def score(self, query: str, passages: list[str]) -> list[float]:
-        pairs = [[query, passage] for passage in passages]
-        scores: list[float] = []
-        for start in range(0, len(pairs), self.batch_size):
-            batch = pairs[start : start + self.batch_size]
-            batch_scores = self.reranker.compute_score(batch)
-            if not isinstance(batch_scores, list):
-                try:
-                    batch_scores = batch_scores.tolist()
-                except AttributeError:
-                    batch_scores = [batch_scores]
-            scores.extend(float(score) for score in batch_scores)
-        return scores
+        # FlagEmbedding inference on Apple MPS is not safe to run concurrently.
+        # Serializing it also ensures the lazy model initialization happens once.
+        with self._inference_lock:
+            pairs = [[query, passage] for passage in passages]
+            scores: list[float] = []
+            for start in range(0, len(pairs), self.batch_size):
+                batch = pairs[start : start + self.batch_size]
+                batch_scores = self.reranker.compute_score(batch)
+                if not isinstance(batch_scores, list):
+                    try:
+                        batch_scores = batch_scores.tolist()
+                    except AttributeError:
+                        batch_scores = [batch_scores]
+                scores.extend(float(score) for score in batch_scores)
+            return scores
 
 
 def build_handler(state: RerankerState):
