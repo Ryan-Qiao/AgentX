@@ -33,6 +33,7 @@ public class ChatMessageDTO {
     public static class MetaData {
         private ToolResponseMessage.ToolResponse toolResponse;
         private List<AssistantMessage.ToolCall> toolCalls;
+        private String traceId;
     }
 
     @Getter

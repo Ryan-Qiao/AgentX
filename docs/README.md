@@ -1,26 +1,37 @@
 # JChatMind Docs Index
 
-这个目录目前主要分为两大部分：`memory` 和 `rag`。
+这个目录目前主要分为三大部分：`agent-trace`、`memory` 和 `rag`。
 
 ## 推荐阅读顺序
 
-1. `memory/plan/core-vs-retrieved-memory.md`
+1. `agent-trace/plan/agent-trace-upgrade.md`
+   - Agent Trace 系统升级方案。
+   - 重点看结构化 Trace 日志协议、采集投影、独立查询入口和分阶段实施计划。
+
+2. `memory/plan/core-vs-retrieved-memory.md`
    - Agent Memory 的核心分类标准。
    - 明确 Core Memory 和 Retrieved Memory 的职责边界。
 
-2. `memory/plan/auto-agent-memory-design.md`
+3. `memory/plan/auto-agent-memory-design.md`
    - Agent 自动记忆的设计方案。
    - 重点看创建时配置、异步整理流程、job state 幂等机制和记忆提取 prompt。
 
-3. `rag/plan/rag-system-upgrade.md`
+4. `rag/plan/rag-system-upgrade.md`
    - RAG 系统升级的主方案文档。
    - 重点看多格式导入、分块策略、召回可观测、RAG 重排和离线评测设计。
 
-4. `rag/implementation/rag-system-upgrade-implementation-report.md`
+5. `rag/implementation/rag-system-upgrade-implementation-report.md`
    - RAG 升级完成后的实施报告。
    - 用来对照代码改造点、测试情况和离线评测结果。
 
 ## 目录说明
+
+### `agent-trace/`
+
+Agent 执行追踪、行为审计和问题诊断相关文档。
+
+- `plan/`
+  - `agent-trace-upgrade.md`
 
 ### `memory/`
 
@@ -57,6 +68,7 @@ RAG 相关文档和评测产物。
 
 ### 建议保留
 
+- `agent-trace/plan/agent-trace-upgrade.md`
 - `memory/plan/core-vs-retrieved-memory.md`
 - `memory/plan/auto-agent-memory-design.md`
 - `rag/plan/rag-system-upgrade.md`
@@ -77,4 +89,3 @@ RAG 相关文档和评测产物。
 ### 建议删除
 
 - `docs/.DS_Store`
-

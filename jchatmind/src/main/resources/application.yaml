@@ -45,6 +45,10 @@ document:
   storage:
     base-path: ./data/documents
 
+agent-trace:
+  enabled: ${AGENT_TRACE_ENABLED:true}
+  max-field-chars: ${AGENT_TRACE_MAX_FIELD_CHARS:20000}
+
 rag:
   document-converter:
     markitdown-command: ${MARKITDOWN_COMMAND:markitdown}

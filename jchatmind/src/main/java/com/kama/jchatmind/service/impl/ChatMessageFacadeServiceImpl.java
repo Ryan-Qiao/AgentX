@@ -28,6 +28,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @AllArgsConstructor
@@ -76,6 +77,12 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
 
     @Override
     public CreateChatMessageResponse createChatMessage(CreateChatMessageRequest request) {
+        String traceId = UUID.randomUUID().toString();
+        ChatMessageDTO.MetaData metadata = request.getMetadata() == null
+                ? ChatMessageDTO.MetaData.builder().build()
+                : request.getMetadata();
+        metadata.setTraceId(traceId);
+        request.setMetadata(metadata);
         ChatMessage chatMessage = doCreateChatMessage(request);
         ChatSession chatSession = chatSessionMapper.selectById(chatMessage.getSessionId());
         if (chatSession == null) {
@@ -86,8 +93,10 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
         }
         // 发布聊天通知事件
         publisher.publishEvent(new ChatEvent(
+                        traceId,
                         chatSession.getAgentId(),
                         chatMessage.getSessionId(),
+                        chatMessage.getId(),
                         chatMessage.getContent()
                 )
         );
@@ -95,6 +104,7 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
         // 返回生成的 chatMessageId
         return CreateChatMessageResponse.builder()
                 .chatMessageId(chatMessage.getId())
+                .traceId(traceId)
                 .build();
     }
 

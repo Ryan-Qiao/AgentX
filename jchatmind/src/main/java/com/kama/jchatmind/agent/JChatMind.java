@@ -8,6 +8,10 @@ import com.kama.jchatmind.model.response.CreateChatMessageResponse;
 import com.kama.jchatmind.model.vo.ChatMessageVO;
 import com.kama.jchatmind.service.ChatMessageFacadeService;
 import com.kama.jchatmind.service.SseService;
+import com.kama.jchatmind.trace.AgentTraceContext;
+import com.kama.jchatmind.trace.AgentTraceRecorder;
+import com.kama.jchatmind.trace.TraceEventStatus;
+import com.kama.jchatmind.trace.TraceEventType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -35,6 +39,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.time.Instant;
+import java.util.LinkedHashMap;
 
 @Slf4j
 public class JChatMind {
@@ -107,6 +113,13 @@ public class JChatMind {
     // AI 返回的，已经持久化，但是需要 sse 发给前端的消息
     private final List<ChatMessageDTO> pendingChatMessages = new ArrayList<>();
 
+    private String modelName;
+    private AgentTraceContext traceContext;
+    private AgentTraceRecorder traceRecorder;
+    private int currentStep;
+    private Instant runStartedAt;
+    private String lastAssistantMessageId;
+
     public JChatMind() {
     }
 
@@ -125,7 +138,10 @@ public class JChatMind {
                      SseService sseService,
                      ChatMessageFacadeService chatMessageFacadeService,
                      ChatMessageConverter chatMessageConverter,
-                     String agentMemoryPrompt
+                     String agentMemoryPrompt,
+                     String modelName,
+                     AgentTraceContext traceContext,
+                     AgentTraceRecorder traceRecorder
     ) {
         this.agentId = agentId;
         this.name = name;
@@ -143,6 +159,9 @@ public class JChatMind {
         this.chatMessageFacadeService = chatMessageFacadeService;
         this.chatMessageConverter = chatMessageConverter;
         this.agentMemoryPrompt = agentMemoryPrompt;
+        this.modelName = modelName;
+        this.traceContext = traceContext;
+        this.traceRecorder = traceRecorder;
 
         this.agentState = AgentState.IDLE;
 
@@ -339,10 +358,12 @@ public class JChatMind {
                     .sessionId(this.chatSessionId)
                     .metadata(ChatMessageDTO.MetaData.builder()
                             .toolCalls(assistantMessage.getToolCalls())
+                            .traceId(this.traceContext.traceId())
                             .build())
                     .build();
             CreateChatMessageResponse chatMessage = chatMessageFacadeService.createChatMessage(chatMessageDTO);
             chatMessageDTO.setId(chatMessage.getChatMessageId());
+            lastAssistantMessageId = chatMessage.getChatMessageId();
             pendingChatMessages.add(chatMessageDTO);
         } else if (message instanceof ToolResponseMessage toolResponseMessage) {
             // 持久化 ToolResponseMessage
@@ -352,6 +373,7 @@ public class JChatMind {
                         .sessionId(this.chatSessionId)
                         .metadata(ChatMessageDTO.MetaData.builder()
                                 .toolResponse(toolResponse)
+                                .traceId(this.traceContext.traceId())
                                 .build())
                         .build();
                 CreateChatMessageResponse chatMessage = chatMessageFacadeService.createChatMessage(chatMessageDTO);
@@ -560,6 +582,25 @@ public class JChatMind {
         );
     }
 
+    private void trace(TraceEventType type,
+                       TraceEventStatus status,
+                       Instant startedAt,
+                       String name,
+                       Map<String, Object> payload,
+                       Throwable error) {
+        if (traceRecorder == null || traceContext == null) return;
+        traceRecorder.record(traceContext, type, status,
+                currentStep == 0 ? null : currentStep, name, startedAt, payload, error);
+    }
+
+    private Map<String, Object> payload(Object... values) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < values.length; i += 2) {
+            if (values[i + 1] != null) result.put(String.valueOf(values[i]), values[i + 1]);
+        }
+        return result;
+    }
+
     private boolean think() {
         String systemPromptText = buildSystemPromptText();
 
@@ -576,14 +617,27 @@ public class JChatMind {
             sendAgentStatus(SseMessage.Type.AI_THINKING,
                     attempt == 0 ? "正在理解你的问题" : "模型返回为空，正在重试");
 
-            // 直接获取完整响应，避免流式分片导致最后保存的内容为空。
-            this.lastChatResponse = this.chatClient
-                    .prompt(prompt)
-                    .system(systemPromptText)
-                    .toolCallbacks(this.availableTools.toArray(new ToolCallback[0]))
-                    .call()
-                    .chatClientResponse()
-                    .chatResponse();
+            Instant modelCallStartedAt = Instant.now();
+            trace(TraceEventType.MODEL_CALL_STARTED, TraceEventStatus.STARTED, modelCallStartedAt,
+                    this.modelName, payload(
+                            "attemptNo", attempt + 1,
+                            "messageCount", this.chatMemory.get(this.chatSessionId).size(),
+                            "toolNames", availableToolNames()
+                    ), null);
+            try {
+                // 直接获取完整响应，避免流式分片导致最后保存的内容为空。
+                this.lastChatResponse = this.chatClient
+                        .prompt(prompt)
+                        .system(systemPromptText)
+                        .toolCallbacks(this.availableTools.toArray(new ToolCallback[0]))
+                        .call()
+                        .chatClientResponse()
+                        .chatResponse();
+            } catch (Exception e) {
+                trace(TraceEventType.MODEL_CALL_FAILED, TraceEventStatus.FAILED, modelCallStartedAt,
+                        this.modelName, payload("attemptNo", attempt + 1), e);
+                throw e;
+            }
 
             Assert.notNull(this.lastChatResponse, "Last chat client response cannot be null");
 
@@ -595,6 +649,12 @@ public class JChatMind {
 
             toolCalls = output.getToolCalls();
             executableToolCalls = executableToolCalls(toolCalls);
+            trace(TraceEventType.MODEL_CALL_COMPLETED, TraceEventStatus.COMPLETED, modelCallStartedAt,
+                    this.modelName, payload(
+                            "attemptNo", attempt + 1,
+                            "content", output.getText(),
+                            "toolCalls", toolCalls
+                    ), null);
 
             if (StringUtils.hasText(output.getText()) || !executableToolCalls.isEmpty()) {
                 break;
@@ -602,6 +662,8 @@ public class JChatMind {
 
             log.warn("Model returned empty assistant content, retrying if possible: agentId={}, chatSessionId={}, attempt={}/{}",
                     this.agentId, this.chatSessionId, attempt + 1, EMPTY_RESPONSE_MAX_RETRIES + 1);
+            trace(TraceEventType.MODEL_EMPTY_RESPONSE_RETRY, TraceEventStatus.COMPLETED, null,
+                    this.modelName, payload("attemptNo", attempt + 1, "maxAttempts", EMPTY_RESPONSE_MAX_RETRIES + 1), null);
         }
 
         Assert.notNull(output, "Assistant output cannot be null");
@@ -637,11 +699,11 @@ public class JChatMind {
             return;
         }
 
-        List<String> toolNames = executableToolCalls(this.lastChatResponse
+        List<AssistantMessage.ToolCall> calls = executableToolCalls(this.lastChatResponse
                 .getResult()
                 .getOutput()
-                .getToolCalls())
-                .stream()
+                .getToolCalls());
+        List<String> toolNames = calls.stream()
                 .map(AssistantMessage.ToolCall::name)
                 .toList();
         sendAgentStatus(SseMessage.Type.AI_EXECUTING,
@@ -652,7 +714,24 @@ public class JChatMind {
                 .chatOptions(this.chatOptions)
                 .build();
 
-        ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(prompt, this.lastChatResponse);
+        Map<String, Instant> toolStartedAt = new LinkedHashMap<>();
+        for (AssistantMessage.ToolCall call : calls) {
+            Instant startedAt = Instant.now();
+            toolStartedAt.put(call.id(), startedAt);
+            trace(TraceEventType.TOOL_CALL_STARTED, TraceEventStatus.STARTED, startedAt,
+                    call.name(), payload("toolCallId", call.id(), "arguments", call.arguments()), null);
+        }
+
+        ToolExecutionResult toolExecutionResult;
+        try {
+            toolExecutionResult = toolCallingManager.executeToolCalls(prompt, this.lastChatResponse);
+        } catch (Exception e) {
+            for (AssistantMessage.ToolCall call : calls) {
+                trace(TraceEventType.TOOL_CALL_FAILED, TraceEventStatus.FAILED, toolStartedAt.get(call.id()),
+                        call.name(), payload("toolCallId", call.id()), e);
+            }
+            throw e;
+        }
 
         this.chatMemory.clear(this.chatSessionId);
         this.chatMemory.add(this.chatSessionId, toolExecutionResult.conversationHistory());
@@ -660,6 +739,12 @@ public class JChatMind {
         ToolResponseMessage toolResponseMessage = (ToolResponseMessage) toolExecutionResult
                 .conversationHistory()
                 .get(toolExecutionResult.conversationHistory().size() - 1);
+
+        for (ToolResponseMessage.ToolResponse response : toolResponseMessage.getResponses()) {
+            trace(TraceEventType.TOOL_CALL_COMPLETED, TraceEventStatus.COMPLETED,
+                    toolStartedAt.get(response.id()), response.name(),
+                    payload("toolCallId", response.id(), "result", response.responseData()), null);
+        }
 
         String collect = toolResponseMessage.getResponses()
                 .stream()
@@ -676,11 +761,16 @@ public class JChatMind {
 
     // 单个步骤模板
     private void step() {
+        Instant stepStartedAt = Instant.now();
+        trace(TraceEventType.STEP_STARTED, TraceEventStatus.STARTED, stepStartedAt,
+                "step-" + currentStep, payload("stepNo", currentStep), null);
         if (think()) {
             execute();
         } else { // 没有工具调用
             agentState = AgentState.FINISHED;
         }
+        trace(TraceEventType.STEP_COMPLETED, TraceEventStatus.COMPLETED, stepStartedAt,
+                "step-" + currentStep, payload("stepNo", currentStep, "agentState", agentState.name()), null);
     }
 
     // 运行
@@ -690,9 +780,20 @@ public class JChatMind {
         }
 
         try {
+            runStartedAt = Instant.now();
+            trace(TraceEventType.RUN_STARTED, TraceEventStatus.STARTED, runStartedAt, this.name,
+                    payload(
+                            "agentName", this.name,
+                            "model", this.modelName,
+                            "maxSteps", MAX_STEPS,
+                            "availableTools", availableToolNames(),
+                            "knowledgeBaseIds", this.availableKbs == null ? List.of() : this.availableKbs.stream().map(KnowledgeBaseDTO::getId).toList()
+                    ), null);
+            trace(TraceEventType.CONTEXT_BUILT, TraceEventStatus.COMPLETED, null, "context",
+                    payload("historyMessageCount", this.chatMemory.get(this.chatSessionId).size()), null);
             for (int i = 0; i < MAX_STEPS && agentState != AgentState.FINISHED; i++) {
                 // 当前步骤，用于实现 Agent Loop
-                int currentStep = i + 1;
+                currentStep = i + 1;
                 step();
                 if (currentStep >= MAX_STEPS) {
                     agentState = AgentState.FINISHED;
@@ -700,10 +801,17 @@ public class JChatMind {
                 }
             }
             agentState = AgentState.FINISHED;
+            trace(TraceEventType.RUN_COMPLETED, TraceEventStatus.COMPLETED, runStartedAt, this.name,
+                    payload(
+                            "finishReason", currentStep >= MAX_STEPS ? "MAX_STEPS_REACHED" : "FINAL_RESPONSE",
+                            "assistantMessageId", lastAssistantMessageId
+                    ), null);
             sendAgentDone();
         } catch (Exception e) {
             agentState = AgentState.ERROR;
             log.error("Error running agent", e);
+            trace(TraceEventType.RUN_FAILED, TraceEventStatus.FAILED, runStartedAt, this.name,
+                    payload("finishReason", "INTERNAL_ERROR", "assistantMessageId", lastAssistantMessageId), e);
             notifyRunError(e);
         }
     }

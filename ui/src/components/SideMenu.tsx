@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { RobotOutlined } from "@ant-design/icons";
-import { Tabs, type TabsProps } from "antd";
+import { ApartmentOutlined, RobotOutlined } from "@ant-design/icons";
+import { Button, Tabs, type TabsProps } from "antd";
 import { useNavigate } from "react-router-dom";
 import AgentTabContent from "./tabs/AgentTabContent.tsx";
 import AddAgentModal from "./modals/AddAgentModal.tsx";
@@ -36,6 +36,7 @@ const SideMenu: React.FC<SideMenuProps> = () => {
     useAgents();
 
   const [activeKey, setActiveKey] = useState(() => {
+    if (location.pathname.startsWith("/agent-trace")) return "agentTrace";
     if (location.pathname.startsWith("/agent")) return "agent";
     if (location.pathname.startsWith("/knowledge-base")) return "knowledgeBase";
     if (location.pathname.startsWith("/chat")) return "chat";
@@ -46,6 +47,7 @@ const SideMenu: React.FC<SideMenuProps> = () => {
 
   const handleTabChange = (key: string) => {
     setActiveKey(key);
+    if (key === "agentTrace") navigate("/agent-trace");
   };
 
   const items: TabsProps["items"] = [
@@ -69,6 +71,20 @@ const SideMenu: React.FC<SideMenuProps> = () => {
       key: "chat",
       label: <span className="select-none">聊天记录</span>,
       children: <ChatTabContent />,
+    },
+    {
+      key: "agentTrace",
+      label: <span className="select-none">Trace</span>,
+      children: (
+        <div className="flex h-full flex-col items-center justify-center gap-3 bg-white px-6 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50">
+            <ApartmentOutlined className="text-xl text-indigo-500" />
+          </div>
+          <div className="text-sm font-medium text-zinc-800">Agent Trace</div>
+          <div className="text-xs leading-5 text-zinc-500">通过 Trace ID 回放 Agent 的完整执行过程</div>
+          <Button type="primary" onClick={() => navigate("/agent-trace")}>打开查询页面</Button>
+        </div>
+      ),
     },
     {
       key: "knowledgeBase",

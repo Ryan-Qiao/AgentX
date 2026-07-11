@@ -6,7 +6,9 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 public class ChatEvent {
+    private String traceId;
     private String agentId;
     private String sessionId;
+    private String userMessageId;
     private String userInput;
 }

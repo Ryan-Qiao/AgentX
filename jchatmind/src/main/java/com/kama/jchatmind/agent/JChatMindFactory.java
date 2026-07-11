@@ -21,6 +21,8 @@ import com.kama.jchatmind.service.ChatMessageFacadeService;
 import com.kama.jchatmind.service.SseService;
 import com.kama.jchatmind.service.ToolFacadeService;
 import com.kama.jchatmind.service.UserMemoryFacadeService;
+import com.kama.jchatmind.trace.AgentTraceContext;
+import com.kama.jchatmind.trace.AgentTraceRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -56,6 +58,7 @@ public class JChatMindFactory {
     private final ChatMessageConverter chatMessageConverter;
     private final AgentMemoryFacadeService agentMemoryFacadeService;
     private final UserMemoryFacadeService userMemoryFacadeService;
+    private final AgentTraceRecorder agentTraceRecorder;
 
     public JChatMindFactory(
             ChatClientRegistry chatClientRegistry,
@@ -68,7 +71,8 @@ public class JChatMindFactory {
             ChatMessageFacadeService chatMessageFacadeService,
             ChatMessageConverter chatMessageConverter,
             AgentMemoryFacadeService agentMemoryFacadeService,
-            UserMemoryFacadeService userMemoryFacadeService
+            UserMemoryFacadeService userMemoryFacadeService,
+            AgentTraceRecorder agentTraceRecorder
     ) {
         this.chatClientRegistry = chatClientRegistry;
         this.sseService = sseService;
@@ -81,6 +85,7 @@ public class JChatMindFactory {
         this.chatMessageConverter = chatMessageConverter;
         this.agentMemoryFacadeService = agentMemoryFacadeService;
         this.userMemoryFacadeService = userMemoryFacadeService;
+        this.agentTraceRecorder = agentTraceRecorder;
     }
 
     private Agent loadAgent(String agentId) {
@@ -370,7 +375,8 @@ public class JChatMindFactory {
             List<KnowledgeBaseDTO> knowledgeBases,
             List<ToolCallback> toolCallbacks,
             String chatSessionId,
-            String memoryPrompt
+            String memoryPrompt,
+            AgentTraceContext traceContext
     ) {
         ChatClient chatClient = chatClientRegistry.get(agent.getModel());
         if (Objects.isNull(chatClient)) {
@@ -392,14 +398,17 @@ public class JChatMindFactory {
                 sseService,
                 chatMessageFacadeService,
                 chatMessageConverter,
-                memoryPrompt
+                memoryPrompt,
+                agent.getModel(),
+                traceContext,
+                agentTraceRecorder
         );
     }
 
     /**
      * 创建一个 JChatMind 实例
      */
-    public JChatMind create(String agentId, String chatSessionId) {
+    public JChatMind create(String agentId, String chatSessionId, String traceId, String userMessageId) {
         Agent agent = loadAgent(agentId);
         AgentDTO agentConfig = toAgentConfig(agent);
         List<Message> memory = loadMemory(chatSessionId, agentConfig);
@@ -419,7 +428,8 @@ public class JChatMindFactory {
                 knowledgeBases,
                 toolCallbacks,
                 chatSessionId,
-                memoryPrompt
+                memoryPrompt,
+                new AgentTraceContext(traceId, agentId, chatSessionId, userMessageId)
         );
     }
 }

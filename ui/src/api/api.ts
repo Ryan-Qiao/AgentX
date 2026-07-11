@@ -331,6 +331,7 @@ export interface CreateChatMessageRequest {
 
 export interface CreateChatMessageResponse {
   chatMessageId: string;
+  traceId: string;
 }
 
 export interface UpdateChatMessageRequest {
@@ -371,6 +372,50 @@ export async function updateChatMessage(
  */
 export async function deleteChatMessage(chatMessageId: string): Promise<void> {
   return del<void>(`/chat-messages/${chatMessageId}`);
+}
+
+export interface AgentTraceSummary {
+  id: string;
+  agentId?: string;
+  sessionId?: string;
+  userMessageId?: string;
+  assistantMessageId?: string;
+  status: "RUNNING" | "COMPLETED" | "FAILED";
+  finishReason?: string;
+  modelName?: string;
+  totalSteps: number;
+  totalModelCalls: number;
+  totalToolCalls: number;
+  traceIncomplete: boolean;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  errorMessage?: string;
+}
+
+export interface AgentTraceEventDetail {
+  eventId: string;
+  sequenceNo: number;
+  stepNo?: number;
+  eventType: string;
+  eventName?: string;
+  status: "STARTED" | "COMPLETED" | "FAILED";
+  occurredAt: string;
+  durationMs?: number;
+  payload?: Record<string, unknown>;
+  error?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentTraceDetailResponse {
+  trace: AgentTraceSummary;
+  events: AgentTraceEventDetail[];
+}
+
+export async function getAgentTrace(
+  traceId: string,
+): Promise<AgentTraceDetailResponse> {
+  return get<AgentTraceDetailResponse>(`/agent-traces/${traceId}`);
 }
 
 /**

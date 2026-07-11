@@ -22,6 +22,7 @@ export interface ToolResponse {
 export interface ChatMessageVOMetadata {
   toolCalls?: ToolCall[];
   toolResponse?: ToolResponse;
+  traceId?: string;
 }
 
 export interface ChatMessageVO {

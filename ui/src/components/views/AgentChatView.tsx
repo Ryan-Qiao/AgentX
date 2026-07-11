@@ -338,6 +338,7 @@ const AgentChatView: React.FC = () => {
           sessionId: targetSessionId,
           role: "user",
           content: trimmedContent,
+          metadata: { traceId: response.traceId },
         });
         await refreshChatSessions();
       } catch (error) {

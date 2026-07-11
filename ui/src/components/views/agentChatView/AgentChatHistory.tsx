@@ -8,7 +8,11 @@ import {
   RightOutlined,
   CodeOutlined,
   FileTextOutlined,
+  CopyOutlined,
+  MoreOutlined,
+  NumberOutlined,
 } from "@ant-design/icons";
+import { Button, Dropdown, message as antdMessage } from "antd";
 import type { ChatMessageVO, SseMessageType, ToolResponse } from "../../../types";
 
 interface KnowledgeHit {
@@ -233,6 +237,49 @@ const BouncingDots: React.FC = () => {
   );
 };
 
+const MessageActions: React.FC<{ message: ChatMessageVO }> = ({ message }) => {
+  const copyText = async (text: string, successText: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      antdMessage.success(successText);
+    } catch {
+      antdMessage.error("复制失败，请重试");
+    }
+  };
+
+  const traceId = message.metadata?.traceId;
+  return (
+    <Dropdown
+      trigger={["click"]}
+      menu={{
+        items: [
+          {
+            key: "copy-message",
+            icon: <CopyOutlined />,
+            label: "复制消息",
+            onClick: () => void copyText(message.content ?? "", "消息已复制"),
+          },
+          {
+            key: "copy-trace-id",
+            icon: <NumberOutlined />,
+            label: "复制 Trace ID",
+            disabled: !traceId,
+            onClick: () => traceId && void copyText(traceId, "Trace ID 已复制"),
+          },
+        ],
+      }}
+    >
+      <Button
+        type="text"
+        size="small"
+        icon={<MoreOutlined />}
+        aria-label="消息菜单"
+        className="opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+      />
+    </Dropdown>
+  );
+};
+
 const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
   messages,
   streamingContent = "",
@@ -327,22 +374,25 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
           message.role === "assistant" ? stripDsmlToolCalls(message.content ?? "") : "";
 
         return (
-          <div className="mb-4" key={message.id}>
+          <div className="group mb-4" key={message.id}>
             {message.role === "assistant" && Boolean(visibleAssistantContent) && (
-              <Bubble
-                content={
-                  <div className="w-full">
-                    <div>
-                      <XMarkdown
-                        streaming={{ enableAnimation: false, hasNextChunk: true }}
-                      >
-                        {visibleAssistantContent}
-                      </XMarkdown>
+              <div className="flex items-start gap-1">
+                <Bubble
+                  content={
+                    <div className="w-full">
+                      <div>
+                        <XMarkdown
+                          streaming={{ enableAnimation: false, hasNextChunk: true }}
+                        >
+                          {visibleAssistantContent}
+                        </XMarkdown>
+                      </div>
                     </div>
-                  </div>
-                }
-                placement="start"
-              />
+                  }
+                  placement="start"
+                />
+                <MessageActions message={message} />
+              </div>
             )}
 
             {message.role === "tool" && message.metadata?.toolResponse && (
@@ -354,7 +404,10 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
             )}
 
             {message.role === "user" && (
-              <Bubble content={message.content} placement="end" />
+              <div className="flex items-start justify-end gap-1">
+                <MessageActions message={message} />
+                <Bubble content={message.content} placement="end" />
+              </div>
             )}
 
             {message.role === "system" && (
