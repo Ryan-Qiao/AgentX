@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Button,
   Card,
@@ -22,6 +23,7 @@ import {
   type AgentTraceDetailResponse,
   type AgentTraceEventDetail,
 } from "../../api/api";
+import { saveAgentTraceHistory } from "../../utils/agentTraceHistory";
 
 const { Text, Title } = Typography;
 
@@ -47,25 +49,43 @@ function JsonBlock({ value }: { value?: Record<string, unknown> }) {
 }
 
 export default function AgentTraceView() {
-  const [traceId, setTraceId] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTraceId = searchParams.get("traceId") || "";
+  const [traceId, setTraceId] = useState(initialTraceId);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<AgentTraceDetailResponse | null>(null);
   const [error, setError] = useState("");
 
-  const query = async () => {
-    const id = traceId.trim();
+  const query = useCallback(async (requestedTraceId: string) => {
+    const id = requestedTraceId.trim();
     if (!id) return;
     setLoading(true);
     setError("");
     try {
-      setDetail(await getAgentTrace(id));
+      const result = await getAgentTrace(id);
+      setDetail(result);
+      setTraceId(id);
+      setSearchParams({ traceId: id }, { replace: true });
+      saveAgentTraceHistory({
+        traceId: id,
+        status: result.trace.status,
+        modelName: result.trace.modelName,
+        totalSteps: result.trace.totalSteps,
+        durationMs: result.trace.durationMs,
+        queriedAt: new Date().toISOString(),
+      });
     } catch (e) {
       setDetail(null);
       setError(e instanceof Error ? e.message : "Trace 查询失败");
     } finally {
       setLoading(false);
     }
-  };
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    if (!initialTraceId) return;
+    queueMicrotask(() => void query(initialTraceId));
+  }, [initialTraceId, query]);
 
   return (
     <div className="h-full overflow-auto bg-zinc-50 p-8">
@@ -81,12 +101,12 @@ export default function AgentTraceView() {
               size="large"
               value={traceId}
               onChange={(event) => setTraceId(event.target.value)}
-              onPressEnter={() => void query()}
+              onPressEnter={() => void query(traceId)}
               placeholder="例如：550e8400-e29b-41d4-a716-446655440000"
               prefix={<SearchOutlined className="text-zinc-400" />}
               allowClear
             />
-            <Button size="large" type="primary" loading={loading} onClick={() => void query()}>
+            <Button size="large" type="primary" loading={loading} onClick={() => void query(traceId)}>
               查询 Trace
             </Button>
           </div>

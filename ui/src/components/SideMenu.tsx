@@ -1,6 +1,6 @@
-import React, { useState } from "react";
-import { ApartmentOutlined, RobotOutlined, MessageOutlined, DatabaseOutlined } from "@ant-design/icons";
-import { Button, Tabs, type TabsProps } from "antd";
+import React, { useEffect, useState } from "react";
+import { ApartmentOutlined, RobotOutlined, MessageOutlined, DatabaseOutlined, ClockCircleOutlined, DeleteOutlined } from "@ant-design/icons";
+import { Empty, Tabs, Tag, type TabsProps } from "antd";
 import { useNavigate } from "react-router-dom";
 import AgentTabContent from "./tabs/AgentTabContent.tsx";
 import AddAgentModal from "./modals/AddAgentModal.tsx";
@@ -9,6 +9,13 @@ import KnowledgeBaseTabContent from "./tabs/KnowledgeBaseTabContent.tsx";
 import AddKnowledgeBaseModal from "./modals/AddKnowledgeBaseModal.tsx";
 import { useAgents } from "../hooks/useAgents.ts";
 import { useKnowledgeBases } from "../hooks/useKnowledgeBases.ts";
+import {
+  AGENT_TRACE_HISTORY_CHANGED,
+  clearAgentTraceHistory,
+  readAgentTraceHistory,
+  removeAgentTraceHistory,
+  type AgentTraceHistoryItem,
+} from "../utils/agentTraceHistory.ts";
 
 interface SideMenuProps {
   children?: React.ReactNode;
@@ -44,6 +51,19 @@ const SideMenu: React.FC<SideMenuProps> = () => {
   });
 
   const { knowledgeBases, createKnowledgeBaseHandle } = useKnowledgeBases();
+  const [traceHistory, setTraceHistory] = useState<AgentTraceHistoryItem[]>(() =>
+    readAgentTraceHistory(),
+  );
+
+  useEffect(() => {
+    const refresh = () => setTraceHistory(readAgentTraceHistory());
+    window.addEventListener(AGENT_TRACE_HISTORY_CHANGED, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(AGENT_TRACE_HISTORY_CHANGED, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
 
   const handleTabChange = (key: string) => {
     setActiveKey(key);
@@ -79,13 +99,81 @@ const SideMenu: React.FC<SideMenuProps> = () => {
       key: "agentTrace",
       label: <span className="select-none">Trace</span>,
       children: (
-        <div className="flex h-full flex-col items-center justify-center gap-3 bg-white px-6 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50">
-            <ApartmentOutlined className="text-xl text-indigo-500" />
+        <div className="flex h-full min-h-0 flex-col bg-white">
+          <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+            <div>
+              <div className="text-sm font-semibold text-zinc-900">最近查询</div>
+              <div className="mt-0.5 text-xs text-zinc-400">最多保留 20 条</div>
+            </div>
+            {traceHistory.length > 0 && (
+              <button
+                type="button"
+                className="text-xs text-zinc-400 transition-colors hover:text-red-500"
+                onClick={clearAgentTraceHistory}
+              >
+                清空
+              </button>
+            )}
           </div>
-          <div className="text-sm font-medium text-zinc-800">Agent Trace</div>
-          <div className="text-xs leading-5 text-zinc-500">通过 Trace ID 回放 Agent 的完整执行过程</div>
-          <Button type="primary" onClick={() => navigate("/agent-trace")}>打开查询页面</Button>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            {traceHistory.length === 0 ? (
+              <div className="flex h-full items-center justify-center px-4">
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无查询记录" />
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {traceHistory.map((item) => (
+                  <button
+                    type="button"
+                    key={item.traceId}
+                    className="group/history w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-zinc-50"
+                    onClick={() => navigate(`/agent-trace?traceId=${encodeURIComponent(item.traceId)}`)}
+                  >
+                    <div className="flex items-start gap-2">
+                      <ClockCircleOutlined className="mt-0.5 shrink-0 text-zinc-400" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-mono text-xs text-zinc-700" title={item.traceId}>
+                          {item.traceId.slice(0, 8)}…{item.traceId.slice(-6)}
+                        </div>
+                        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-400">
+                          <Tag
+                            bordered={false}
+                            color={item.status === "COMPLETED" ? "success" : item.status === "FAILED" ? "error" : "processing"}
+                            className="!m-0 !px-1.5 !text-[10px]"
+                          >
+                            {item.status}
+                          </Tag>
+                          <span className="truncate">{item.modelName || "未知模型"}</span>
+                          <span>· {item.totalSteps} 步</span>
+                        </div>
+                        <div className="mt-1 text-[11px] text-zinc-400">
+                          {new Date(item.queriedAt).toLocaleString("zh-CN", { hour12: false })}
+                        </div>
+                      </div>
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label="删除查询记录"
+                        className="rounded p-1 text-zinc-300 opacity-0 transition-all hover:bg-white hover:text-red-500 group-hover/history:opacity-100"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeAgentTraceHistory(item.traceId);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.stopPropagation();
+                            removeAgentTraceHistory(item.traceId);
+                          }
+                        }}
+                      >
+                        <DeleteOutlined />
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       ),
     },
