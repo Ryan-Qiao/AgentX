@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ApartmentOutlined, RobotOutlined } from "@ant-design/icons";
+import { ApartmentOutlined, RobotOutlined, MessageOutlined, DatabaseOutlined } from "@ant-design/icons";
 import { Button, Tabs, type TabsProps } from "antd";
 import { useNavigate } from "react-router-dom";
 import AgentTabContent from "./tabs/AgentTabContent.tsx";
@@ -48,6 +48,9 @@ const SideMenu: React.FC<SideMenuProps> = () => {
   const handleTabChange = (key: string) => {
     setActiveKey(key);
     if (key === "agentTrace") navigate("/agent-trace");
+    if (key === "agent") navigate("/agent");
+    if (key === "chat") navigate("/chat");
+    if (key === "knowledgeBase") navigate("/knowledge-base");
   };
 
   const items: TabsProps["items"] = [
@@ -102,24 +105,32 @@ const SideMenu: React.FC<SideMenuProps> = () => {
   ];
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="h-14 flex items-center border-b border-zinc-100 shrink-0">
-        <div className="flex items-center gap-2.5 px-4">
-          <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
-            <RobotOutlined className="text-base text-indigo-500" />
-          </div>
-          <div className="text-base font-semibold tracking-tight text-zinc-900 select-none">
-            JChatMind
-          </div>
+    <div className="flex h-full">
+      <nav className="w-16 shrink-0 border-r border-[var(--border)] bg-[var(--background)] flex flex-col items-center py-3 gap-2">
+        <div className="brand-mark mb-3" aria-label="AgentX">X</div>
+        {[
+          ["agent", <RobotOutlined />, "智能体"],
+          ["chat", <MessageOutlined />, "聊天"],
+          ["knowledgeBase", <DatabaseOutlined />, "知识库"],
+          ["agentTrace", <ApartmentOutlined />, "Trace"],
+        ].map(([key, icon, label]) => (
+          <button key={key as string} title={label as string} onClick={() => handleTabChange(key as string)} className={`rail-button ${activeKey === key ? "is-active" : ""}`}>
+            {icon as React.ReactNode}
+          </button>
+        ))}
+      </nav>
+      <div className="min-w-0 flex-1 flex flex-col">
+        <div className="h-16 flex items-center px-5 shrink-0">
+          <div><div className="text-[11px] uppercase tracking-[.16em] text-zinc-400">Workspace</div><div className="text-base font-semibold tracking-tight text-zinc-900">AgentX</div></div>
         </div>
-      </div>
-      <div className="flex-1 min-h-0 flex flex-col pt-1">
+        <div className="flex-1 min-h-0 flex flex-col">
         <Tabs
           activeKey={activeKey}
           onChange={handleTabChange}
           items={items}
           className="sidebar-tabs h-full flex flex-col [&_.ant-tabs-content-holder]:flex-1 [&_.ant-tabs-content-holder]:min-h-0 [&_.ant-tabs-content]:h-full [&_.ant-tabs-tabpane]:h-full"
         />
+        </div>
       </div>
       <AddAgentModal
         open={isAddAgentModalOpen}

@@ -367,16 +367,16 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
   return (
     <div 
       ref={scrollContainerRef}
-      className="flex-1 px-8 pt-4 overflow-y-scroll"
+      className="chat-scroll flex-1 overflow-y-scroll px-6 pt-8"
     >
       {messages.map((message) => {
         const visibleAssistantContent =
           message.role === "assistant" ? stripDsmlToolCalls(message.content ?? "") : "";
 
         return (
-          <div className="group mb-4" key={message.id}>
+          <div className="group mx-auto mb-7 max-w-[820px]" key={message.id}>
             {message.role === "assistant" && Boolean(visibleAssistantContent) && (
-              <div className="flex items-start gap-1">
+              <div className="assistant-message flex items-start gap-2">
                 <Bubble
                   content={
                     <div className="w-full">
@@ -389,7 +389,7 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
                       </div>
                     </div>
                   }
-                  placement="start"
+                  placement="start" className="assistant-bubble"
                 />
                 <MessageActions message={message} />
               </div>
@@ -404,9 +404,9 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
             )}
 
             {message.role === "user" && (
-              <div className="flex items-start justify-end gap-1">
+              <div className="user-message flex items-start justify-end gap-2">
                 <MessageActions message={message} />
-                <Bubble content={message.content} placement="end" />
+                <Bubble content={message.content} placement="end" className="user-bubble" />
               </div>
             )}
 
@@ -424,8 +424,8 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
 
       {/* 流式输出区域 */}
       {isStreaming && (
-        <div className="mb-4">
-          <Bubble
+        <div className="mx-auto mb-7 max-w-[820px] assistant-message">
+          <Bubble className="assistant-bubble"
             content={
               streamingContent ? (
                 <XMarkdown streaming={{ enableAnimation: false, hasNextChunk: true }}>
@@ -445,8 +445,8 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
 
       {/* Agent 状态（规划中/思考中/执行中）—— 等待首字期间也需要展示工具进度 */}
       {displayAgentStatus && (!isStreaming || !streamingContent) && (
-        <div className="mb-3 animate-pulse">
-          <Bubble
+        <div className="mx-auto mb-5 max-w-[820px] animate-pulse">
+          <Bubble className="assistant-bubble"
             content={
               <span className="flex items-center gap-2">
                 <span className="font-medium text-indigo-500 text-sm">

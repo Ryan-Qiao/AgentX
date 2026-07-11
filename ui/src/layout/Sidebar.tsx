@@ -7,9 +7,9 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ children }) => {
   return (
     <div
-      className="h-full bg-white border-r border-zinc-200 flex flex-col"
+      className="h-full bg-[var(--background)] border-r border-[var(--border)] flex flex-col"
       style={{
-        width: "320px",
+        width: "348px",
       }}
     >
       {children}

@@ -50,10 +50,10 @@ const EmptyAgentChatView: React.FC<DefaultAgentChatViewProps> = ({
   }, [effectiveAgentId, agentsWithEmoji]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-[var(--background)]">
       {/* Agent 选择器 */}
       {agents.length > 0 && (
-        <div className="border-b border-zinc-100 bg-white px-4 py-2.5">
+        <div className="h-16 border-b border-[var(--border)] bg-[var(--background)] px-6 flex items-center">
           <Select
             value={effectiveAgentId}
             onChange={(value) => setSelectedAgentId(value)}
@@ -124,8 +124,10 @@ const EmptyAgentChatView: React.FC<DefaultAgentChatViewProps> = ({
       </div>
 
       {/* 输入框 */}
-      <div className="border-t border-zinc-100 bg-white px-4 pb-4 pt-3">
+      <div className="composer-dock px-6 pb-5 pt-3">
+        <div className="composer-shell mx-auto max-w-[820px]">
         <Sender
+          className="quiet-sender"
           onSubmit={async () => {
             if (!effectiveAgentId || !message.trim()) return;
             const response = await createChatSession({
@@ -144,11 +146,11 @@ const EmptyAgentChatView: React.FC<DefaultAgentChatViewProps> = ({
           }}
           value={message}
           loading={loading}
-          placeholder="输入消息开始对话..."
-          onChange={(value) => {
-            setMessage(value);
-          }}
+          placeholder="输入消息开始对话…"
+          onChange={setMessage}
         />
+        <div className="px-4 pb-2 text-[11px] text-zinc-400">Enter 发送 · Shift + Enter 换行</div>
+        </div>
       </div>
     </div>
   );

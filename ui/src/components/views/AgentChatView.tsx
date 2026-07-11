@@ -538,10 +538,10 @@ const AgentChatView: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="h-14 shrink-0 border-b border-zinc-100 bg-white px-5 flex items-center">
+    <div className="flex flex-col h-full bg-[var(--background)]">
+      <div className="h-16 shrink-0 border-b border-[var(--border)] bg-[var(--background)] px-7 flex items-center">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-base shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[var(--brand-soft)] flex items-center justify-center text-base shrink-0 ring-1 ring-black/[.03]">
             {agentId ? getAgentEmoji(agentId) : "🤖"}
           </div>
           <div className="min-w-0">
@@ -562,7 +562,7 @@ const AgentChatView: React.FC = () => {
         agentStatusText={agentStatusText}
         agentStatusType={agentStatusType}
       />
-      <div className="border-t border-zinc-100 p-4 bg-white">
+      <div className="composer-dock px-6 pb-5 pt-2">
         {import.meta.env.DEV && (userMemories.length > 0 || agentMemories.length > 0) && (
           <div className="mb-3">
             <Collapse
@@ -605,7 +605,7 @@ const AgentChatView: React.FC = () => {
             />
           </div>
         )}
-        <div className="flex justify-end gap-2 mb-2">
+        <div className="mx-auto flex max-w-[820px] justify-end gap-2 mb-2 px-1 opacity-70 hover:opacity-100 transition-opacity">
           <Button size="small" onClick={() => openRememberModal("user")}>
             让所有 Agent 记住
           </Button>

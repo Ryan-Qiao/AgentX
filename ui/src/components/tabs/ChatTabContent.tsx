@@ -207,7 +207,7 @@ const ChatTabContent: React.FC = () => {
     const itemClassName = options.separated
       ? `w-full px-3 py-3 cursor-pointer transition-all group relative rounded-lg ${
           active
-            ? "bg-indigo-50/80 ring-1 ring-indigo-100 shadow-sm"
+            ? "bg-[var(--brand-soft)]/65 ring-1 ring-indigo-100/70"
             : selected
               ? "bg-zinc-50 ring-1 ring-zinc-200"
               : "hover:bg-zinc-50 active:bg-zinc-100"
@@ -387,10 +387,10 @@ const ChatTabContent: React.FC = () => {
             <p className="text-xs mt-1">点击上方按钮创建新聊天</p>
           </div>
         ) : (
-          <div className="space-y-3 pb-3">
+          <div className="space-y-5 pb-4 px-1">
             {pinnedSessions.length > 0 && (
               <section>
-                <div className="sticky top-0 z-20 flex w-full items-center gap-2 bg-white/95 px-1.5 py-1.5 text-left backdrop-blur">
+                <div className="sticky top-0 z-20 flex w-full items-center gap-2 bg-[var(--background)]/95 px-2 py-2 text-left backdrop-blur">
                   <PushpinFilled className="text-[12px] text-amber-500" />
                   <span className="min-w-0 flex-1 truncate text-xs font-semibold text-zinc-600">
                     已置顶
@@ -411,19 +411,19 @@ const ChatTabContent: React.FC = () => {
               const collapsed = collapsedGroups.has(group.key);
 
               return (
-                <section key={group.key}>
+                <section key={group.key} className="rounded-xl">
                   <button
                     type="button"
                     onClick={() => toggleGroup(group.key)}
-                    className="sticky top-0 z-10 flex w-full items-center gap-2 bg-white/95 px-1.5 py-1.5 text-left backdrop-blur"
+                    className="sticky top-0 z-10 flex w-full items-center gap-2 rounded-lg bg-[var(--background)]/95 px-2 py-2.5 text-left backdrop-blur transition-colors hover:bg-black/[.025]"
                   >
                     <span className="text-[10px] text-zinc-400">
                       {collapsed ? <CaretRightOutlined /> : <CaretDownOutlined />}
                     </span>
-                    <span className="text-base leading-none">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--brand-soft)]/65 text-sm leading-none">
                       {getAgentEmoji(group.agentId)}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-xs font-semibold text-zinc-600">
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-700">
                       {group.label}
                     </span>
                     <span className="text-[11px] text-zinc-400">
@@ -432,7 +432,7 @@ const ChatTabContent: React.FC = () => {
                   </button>
 
                   {!collapsed && (
-                    <div className="mx-1 divide-y divide-zinc-300">
+                    <div className="mt-1 ml-5 space-y-1 border-l border-black/[.06] pl-2">
                       {group.sessions.map((session) =>
                         renderSessionItem(session, {
                           showAgentDetails: false,

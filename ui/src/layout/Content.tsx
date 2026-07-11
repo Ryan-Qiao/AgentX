@@ -5,7 +5,7 @@ interface ContentProps {
 }
 
 const Content: React.FC<ContentProps> = ({ children }) => {
-  return <div className="h-full flex-1">{children}</div>;
+  return <main className="h-full flex-1 bg-[var(--background)]">{children}</main>;
 };
 
 export default Content;
