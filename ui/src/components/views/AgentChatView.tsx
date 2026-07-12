@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button, Modal, Input, Select, Collapse, message as antdMessage } from "antd";
 import AgentChatHistory from "./agentChatView/AgentChatHistory.tsx";
@@ -240,17 +240,22 @@ const AgentChatView: React.FC = () => {
     fetchData().then();
   }, [chatSessionId, resetAssistantRuntimeState, state]);
 
+  // Router 会复用当前组件。会话切换时必须在浏览器绘制前清掉旧会话状态，
+  // 否则新会话历史加载完成前会短暂显示上一段对话。
+  useLayoutEffect(() => {
+    activeChatSessionIdRef.current = chatSessionId;
+    setMessages([]);
+    setAgentId("");
+    setAgentMemories([]);
+    resetAssistantRuntimeState();
+  }, [chatSessionId, resetAssistantRuntimeState]);
+
   useEffect(() => {
     if (!chatSessionId) {
       return;
     }
-    getChatMessages().then();
+    getChatMessages(chatSessionId).then();
   }, [chatSessionId, getChatMessages]);
-
-  useEffect(() => {
-    activeChatSessionIdRef.current = chatSessionId;
-    resetAssistantRuntimeState();
-  }, [chatSessionId, resetAssistantRuntimeState]);
 
   useEffect(() => {
     refreshAgentMemories().catch((error) => {
