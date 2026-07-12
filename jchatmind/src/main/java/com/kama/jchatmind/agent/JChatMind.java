@@ -40,6 +40,7 @@ import java.util.stream.IntStream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.time.Instant;
+import java.net.URI;
 import java.util.LinkedHashMap;
 
 @Slf4j
@@ -95,6 +96,8 @@ public class JChatMind {
     private static final Pattern DSML_PARAMETER_PATTERN = Pattern.compile(
             "(?s)<[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]parameter\\s+name=\"([^\"]+)\">(.*?)</[｜|]\\s*[｜|]DSML[｜|]\\s*[｜|]parameter>");
 
+    private static final Pattern WEB_URL_PATTERN = Pattern.compile("https?://[^\\s\\\"'<>\\]})]+");
+
     // SpringAI 自带的 ChatOptions, 不是 AgentDTO.ChatOptions
     private ChatOptions chatOptions;
 
@@ -119,6 +122,7 @@ public class JChatMind {
     private int currentStep;
     private Instant runStartedAt;
     private String lastAssistantMessageId;
+    private final Map<String, ChatMessageDTO.Citation> webCitations = new LinkedHashMap<>();
 
     public JChatMind() {
     }
@@ -359,6 +363,8 @@ public class JChatMind {
                     .metadata(ChatMessageDTO.MetaData.builder()
                             .toolCalls(assistantMessage.getToolCalls())
                             .traceId(this.traceContext.traceId())
+                            .citations(assistantMessage.getToolCalls().isEmpty() && !webCitations.isEmpty()
+                                    ? new ArrayList<>(webCitations.values()) : null)
                             .build())
                     .build();
             CreateChatMessageResponse chatMessage = chatMessageFacadeService.createChatMessage(chatMessageDTO);
@@ -382,6 +388,32 @@ public class JChatMind {
             }
         } else {
             throw new IllegalArgumentException("不支持的 Message 类型: " + message.getClass().getName());
+        }
+    }
+
+    private boolean isWebSearchResponse(ToolResponseMessage.ToolResponse response) {
+        String name = response.name() == null ? "" : response.name().toLowerCase();
+        return name.contains("search") || name.contains("brave");
+    }
+
+    private void collectWebCitations(ToolResponseMessage toolResponseMessage) {
+        for (ToolResponseMessage.ToolResponse response : toolResponseMessage.getResponses()) {
+            if (!isWebSearchResponse(response) || !StringUtils.hasText(response.responseData())) continue;
+            Matcher matcher = WEB_URL_PATTERN.matcher(response.responseData());
+            while (matcher.find() && webCitations.size() < 12) {
+                String url = matcher.group().replaceAll("[.,;:]+$", "");
+                try {
+                    URI uri = URI.create(url);
+                    String domain = uri.getHost();
+                    if (!StringUtils.hasText(domain)) continue;
+                    if (domain.startsWith("www.")) domain = domain.substring(4);
+                    String favicon = "https://www.google.com/s2/favicons?domain=" + domain + "&sz=64";
+                    webCitations.putIfAbsent(url, ChatMessageDTO.Citation.builder()
+                            .url(url).title(domain).domain(domain).faviconUrl(favicon).build());
+                } catch (IllegalArgumentException ignored) {
+                    log.debug("忽略无法解析的搜索结果 URL: {}", url);
+                }
+            }
         }
     }
 
@@ -503,6 +535,27 @@ public class JChatMind {
                 """;
     }
 
+    private String renderWebSearchPolicyPrompt() {
+        boolean hasWebSearch = availableToolNames().stream()
+                .map(String::toLowerCase)
+                .anyMatch(name -> name.contains("search") || name.contains("brave"));
+        if (!hasWebSearch) return "";
+        return """
+
+                【联网搜索规则】
+                你可以使用联网搜索获取最新或可外部核实的信息。
+                - 用户明确要求搜索、联网、查证、最新信息、链接或来源时，必须搜索。
+                - 新闻、价格、政策、日程、产品信息、公共人物任职、软件版本、近期推荐等可能变化的信息，应搜索。
+                - 用户提到当前上下文中没有内容的具体网页、论文、数据集或近期事件时，应搜索。
+                - 医疗、法律、金融等高风险问题，或你对关键事实没有把握时，应先搜索并优先权威来源。
+                - 翻译、改写、总结用户已提供的内容、创意写作、数学与纯逻辑推理通常不搜索。
+                - 用户明确要求不要联网时，不得搜索。
+                - 搜索只用于补足外部事实，不能代替推理；搜索后优先采用官方、一手和权威来源。
+                - 新闻、争议信息和高风险结论应使用多个相互独立的来源交叉核实，并区分发布时间与事件发生时间。
+                - 最终回答应让每个关键事实都能被实际使用的来源直接支持；不得编造引用。找不到可靠信息时应如实说明。
+                """;
+    }
+
     private String renderToolCatalogPrompt() {
         if (this.availableTools == null || this.availableTools.isEmpty()) {
             return """
@@ -570,12 +623,14 @@ public class JChatMind {
                 %s
                 %s
                 %s
+                %s
                 """.formatted(
                 renderAgentIdentityPrompt(),
                 renderAgentSystemInstructionPrompt(),
                 renderContextPriorityPrompt(),
                 memoryPrompt,
                 renderToolPolicyPrompt(),
+                renderWebSearchPolicyPrompt(),
                 renderToolCatalogPrompt(),
                 renderKnowledgeBasePrompt(),
                 renderEndingRulePrompt()
@@ -739,6 +794,8 @@ public class JChatMind {
         ToolResponseMessage toolResponseMessage = (ToolResponseMessage) toolExecutionResult
                 .conversationHistory()
                 .get(toolExecutionResult.conversationHistory().size() - 1);
+
+        collectWebCitations(toolResponseMessage);
 
         for (ToolResponseMessage.ToolResponse response : toolResponseMessage.getResponses()) {
             trace(TraceEventType.TOOL_CALL_COMPLETED, TraceEventStatus.COMPLETED,

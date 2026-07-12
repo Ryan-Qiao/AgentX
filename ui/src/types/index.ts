@@ -23,6 +23,14 @@ export interface ChatMessageVOMetadata {
   toolCalls?: ToolCall[];
   toolResponse?: ToolResponse;
   traceId?: string;
+  citations?: Citation[];
+}
+
+export interface Citation {
+  url: string;
+  title: string;
+  domain: string;
+  faviconUrl?: string;
 }
 
 export interface ChatMessageVO {

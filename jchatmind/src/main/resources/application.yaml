@@ -24,6 +24,20 @@ spring:
             enable: true
             required: true
   ai:
+    mcp:
+      client:
+        enabled: ${WEB_SEARCH_MCP_ENABLED:true}
+        name: agentx-web-search
+        version: 1.0.0
+        request-timeout: ${WEB_SEARCH_MCP_TIMEOUT:20s}
+        type: SYNC
+        toolcallback:
+          enabled: true
+        streamable-http:
+          connections:
+            web-search:
+              url: ${WEB_SEARCH_MCP_URL:http://localhost:3000}
+              endpoint: /mcp
     deepseek:
       api-key: ${DEEPSEEK_API_KEY:}
       base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}

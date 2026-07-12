@@ -3,6 +3,7 @@ package com.kama.jchatmind.agent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.kama.jchatmind.agent.tools.KnowledgeTools;
 import com.kama.jchatmind.agent.tools.Tool;
+import com.kama.jchatmind.agent.tools.WebSearchTools;
 import com.kama.jchatmind.config.ChatClientRegistry;
 import com.kama.jchatmind.converter.AgentConverter;
 import com.kama.jchatmind.converter.ChatMessageConverter;
@@ -238,6 +239,10 @@ public class JChatMindFactory {
     private List<ToolCallback> buildToolCallbacks(List<Tool> runtimeTools) {
         List<ToolCallback> callbacks = new ArrayList<>();
         for (Tool tool : runtimeTools) {
+            if (tool instanceof WebSearchTools webSearchTools) {
+                callbacks.addAll(webSearchTools.callbacks());
+                continue;
+            }
             Object target = resolveToolTarget(tool);
             ToolCallback[] toolCallbacks = MethodToolCallbackProvider.builder()
                     .toolObjects(target)

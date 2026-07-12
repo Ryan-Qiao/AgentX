@@ -4,6 +4,26 @@
 
 JChatMind 基于 Spring AI 自主实现 Agent Runtime：模型在 **Think → Tool Execute → Observe** 循环中完成多步推理，按 Agent 配置调用工具与知识库；系统同时提供多格式文档 RAG、跨会话长期记忆、全链路 Agent Trace，以及通过 SSE 驱动的 React 对话界面。
 
+## 本地联网搜索
+
+联网搜索使用 Docker 中的 SearXNG 和 `mcp-searxng` HTTP 服务，不需要第三方搜索 API Key，也不依赖本机 Node.js 或 npx。
+
+```bash
+docker compose -f docker-compose.search.yml up -d
+
+cd jchatmind
+./mvnw spring-boot:run
+```
+
+SearXNG 默认监听 `http://localhost:8081`，MCP Streamable HTTP 服务监听 `http://localhost:3000/mcp`。远程部署时可通过 `WEB_SEARCH_MCP_URL` 覆盖 MCP 服务地址。
+联网搜索默认启用；如需临时关闭，可设置 `WEB_SEARCH_MCP_ENABLED=false`。
+
+停止服务：
+
+```bash
+docker compose -f docker-compose.search.yml down
+```
+
 ## 核心亮点
 
 | 能力 | 实现摘要 |
@@ -320,6 +340,7 @@ RUN_STARTED → CONTEXT_BUILT
 | JDK | 17 | 运行后端 |
 | PostgreSQL + pgvector | PostgreSQL 17 | 业务数据、记忆、向量与 Trace |
 | Node.js | 18+ | 运行前端 |
+| Docker Desktop | 最新稳定版 | 运行 SearXNG 与 Web Search MCP 服务 |
 | Ollama | 最新稳定版 | `bge-m3` Embedding 服务 |
 | uv + Python | Python 3.10+ | MarkItDown 与 Reranker 运行时 |
 
@@ -363,6 +384,11 @@ export ZHIPUAI_API_KEY=your_zhipuai_api_key
 # Document conversion
 export MARKITDOWN_COMMAND=markitdown
 
+# Web Search MCP（默认启用，以下均为默认值，可不配置）
+# export WEB_SEARCH_MCP_ENABLED=true
+# export WEB_SEARCH_MCP_URL=http://localhost:3000
+# export WEB_SEARCH_MCP_TIMEOUT=20s
+
 # Optional
 # export RAG_RERANK_BGE_ENDPOINT=http://localhost:8001/rerank
 # export DOCUMENT_STORAGE_BASE_PATH=./data/documents
@@ -384,17 +410,20 @@ curl http://127.0.0.1:8001/health
 ### 5. 启动后端与前端
 
 ```bash
-# Terminal 1 — Backend: http://localhost:8080
+# Terminal 1 — Web Search: SearXNG + MCP Server
+docker compose -f docker-compose.search.yml up -d --build
+
+# Terminal 2 — Backend: http://localhost:8080
 cd jchatmind
 ./mvnw spring-boot:run
 
-# Terminal 2 — Frontend: http://localhost:5173
+# Terminal 3 — Frontend: http://localhost:5173
 cd ui
 npm install
 npm run dev
 ```
 
-访问 <http://localhost:5173>。推荐启动顺序：**PostgreSQL → Ollama → Reranker → Backend → Frontend**。
+访问 <http://localhost:5173>。推荐启动顺序：**PostgreSQL → Ollama → Reranker → SearXNG / MCP → Backend → Frontend**。
 
 ## 服务检查
 
@@ -403,6 +432,8 @@ npm run dev
 | PostgreSQL | `localhost:5432` | `pg_isready` |
 | Ollama Embedding | `http://localhost:11434` | `curl http://127.0.0.1:11434/api/embeddings -d '{"model":"bge-m3","prompt":"hello"}'` |
 | BGE Reranker | `http://localhost:8001` | `curl http://127.0.0.1:8001/health` |
+| Web Search MCP | `http://localhost:3000/mcp` | `curl http://127.0.0.1:3000/health` |
+| SearXNG | `http://localhost:8081` | `curl 'http://127.0.0.1:8081/search?q=AgentX&format=json'` |
 | Backend | `http://localhost:8080` | REST API / SSE |
 | Frontend | `http://localhost:5173` | 浏览器访问 |
 

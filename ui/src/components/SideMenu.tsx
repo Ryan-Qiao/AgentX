@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ApartmentOutlined, RobotOutlined, MessageOutlined, DatabaseOutlined, ClockCircleOutlined, DeleteOutlined } from "@ant-design/icons";
+import { ApartmentOutlined, RobotOutlined, MessageOutlined, DatabaseOutlined, ClockCircleOutlined, DeleteOutlined, BulbOutlined } from "@ant-design/icons";
 import { Empty, Tabs, Tag, type TabsProps } from "antd";
 import { useNavigate } from "react-router-dom";
 import AgentTabContent from "./tabs/AgentTabContent.tsx";
@@ -7,6 +7,7 @@ import AddAgentModal from "./modals/AddAgentModal.tsx";
 import ChatTabContent from "./tabs/ChatTabContent.tsx";
 import KnowledgeBaseTabContent from "./tabs/KnowledgeBaseTabContent.tsx";
 import AddKnowledgeBaseModal from "./modals/AddKnowledgeBaseModal.tsx";
+import UserMemoryTabContent from "./tabs/UserMemoryTabContent.tsx";
 import { useAgents } from "../hooks/useAgents.ts";
 import { useKnowledgeBases } from "../hooks/useKnowledgeBases.ts";
 import {
@@ -190,6 +191,11 @@ const SideMenu: React.FC<SideMenuProps> = () => {
         />
       ),
     },
+    {
+      key: "memory",
+      label: <span className="select-none">记忆</span>,
+      children: <UserMemoryTabContent />,
+    },
   ];
 
   return (
@@ -200,6 +206,7 @@ const SideMenu: React.FC<SideMenuProps> = () => {
           ["agent", <RobotOutlined />, "智能体"],
           ["chat", <MessageOutlined />, "聊天"],
           ["knowledgeBase", <DatabaseOutlined />, "知识库"],
+          ["memory", <BulbOutlined />, "用户级记忆"],
           ["agentTrace", <ApartmentOutlined />, "Trace"],
         ].map(([key, icon, label]) => (
           <button key={key as string} title={label as string} onClick={() => handleTabChange(key as string)} className={`rail-button ${activeKey === key ? "is-active" : ""}`}>

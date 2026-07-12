@@ -34,6 +34,16 @@ public class ChatMessageDTO {
         private ToolResponseMessage.ToolResponse toolResponse;
         private List<AssistantMessage.ToolCall> toolCalls;
         private String traceId;
+        private List<Citation> citations;
+    }
+
+    @Data
+    @Builder
+    public static class Citation {
+        private String url;
+        private String title;
+        private String domain;
+        private String faviconUrl;
     }
 
     @Getter

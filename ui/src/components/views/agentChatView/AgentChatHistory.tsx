@@ -11,9 +11,10 @@ import {
   CopyOutlined,
   MoreOutlined,
   NumberOutlined,
+  GlobalOutlined,
 } from "@ant-design/icons";
-import { Button, Dropdown, message as antdMessage } from "antd";
-import type { ChatMessageVO, SseMessageType, ToolResponse } from "../../../types";
+import { Button, Dropdown, Popover, message as antdMessage } from "antd";
+import type { ChatMessageVO, Citation, SseMessageType, ToolResponse } from "../../../types";
 
 interface KnowledgeHit {
   rank: number;
@@ -280,6 +281,58 @@ const MessageActions: React.FC<{ message: ChatMessageVO }> = ({ message }) => {
   );
 };
 
+const SourcesButton: React.FC<{ citations: Citation[] }> = ({ citations }) => {
+  if (!citations.length) return null;
+  return (
+    <Popover
+      trigger="click"
+      placement="bottomLeft"
+      title={`来源 · ${citations.length}`}
+      content={
+        <div className="max-h-80 w-80 overflow-y-auto">
+          {citations.map((source) => (
+            <a
+              key={source.url}
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-start gap-3 rounded-lg p-2 text-zinc-800 hover:bg-zinc-100"
+            >
+              {source.faviconUrl ? (
+                <img src={source.faviconUrl} alt="" className="mt-0.5 h-5 w-5 rounded" />
+              ) : (
+                <GlobalOutlined className="mt-1 text-zinc-500" />
+              )}
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{source.title || source.domain}</span>
+                <span className="block truncate text-xs text-zinc-500">{source.domain}</span>
+              </span>
+            </a>
+          ))}
+        </div>
+      }
+    >
+      <Button
+        type="text"
+        size="small"
+        aria-label={`查看 ${citations.length} 个来源`}
+        className="rounded-xl bg-zinc-100 px-2.5 text-zinc-600 hover:!bg-zinc-200"
+      >
+        <span className="flex items-center gap-1.5">
+          <span className="flex -space-x-1.5">
+            {citations.slice(0, 3).map((source) =>
+              source.faviconUrl ? (
+                <img key={source.url} src={source.faviconUrl} alt="" className="h-4 w-4 rounded-full border border-white bg-white" />
+              ) : null,
+            )}
+          </span>
+          来源
+        </span>
+      </Button>
+    </Popover>
+  );
+};
+
 const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
   messages,
   streamingContent = "",
@@ -376,7 +429,7 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
         return (
           <div className="group mx-auto mb-7 max-w-[820px]" key={message.id}>
             {message.role === "assistant" && Boolean(visibleAssistantContent) && (
-              <div className="assistant-message flex items-start gap-2">
+              <div className="assistant-message">
                 <Bubble
                   content={
                     <div className="w-full">
@@ -391,7 +444,10 @@ const AgentChatHistory: React.FC<AgentChatHistoryProps> = ({
                   }
                   placement="start" className="assistant-bubble"
                 />
-                <MessageActions message={message} />
+                <div className="mt-1 flex items-center gap-1 pl-1">
+                  <MessageActions message={message} />
+                  <SourcesButton citations={message.metadata?.citations ?? []} />
+                </div>
               </div>
             )}
 
