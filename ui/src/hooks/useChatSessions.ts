@@ -1,4 +1,4 @@
-import { useChatSessionsContext } from "../contexts/ChatSessionsContext.tsx";
+import { useChatSessionsContext } from "../contexts/useChatSessionsContext.ts";
 
 export function useChatSessions() {
   return useChatSessionsContext();

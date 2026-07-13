@@ -34,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Executor;
 
 @Service
 @AllArgsConstructor
@@ -48,6 +49,7 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
     private final RagService ragService;
     private final ChunkBgeM3Mapper chunkBgeM3Mapper;
     private final ObjectMapper objectMapper;
+    private final Executor documentExecutor;
 
     @Override
     public GetDocumentsResponse getDocuments() {
@@ -170,7 +172,8 @@ public class DocumentFacadeServiceImpl implements DocumentFacadeService {
 
             log.info("文档上传成功: kbId={}, documentId={}, filename={}", kbId, documentId, originalFilename);
 
-            processUploadedDocument(kbId, documentId, originalFilename, filetype, filePath, documentDTO);
+            documentExecutor.execute(() -> processUploadedDocument(
+                    kbId, documentId, originalFilename, filetype, filePath, documentDTO));
 
             return CreateDocumentResponse.builder()
                     .documentId(documentId)

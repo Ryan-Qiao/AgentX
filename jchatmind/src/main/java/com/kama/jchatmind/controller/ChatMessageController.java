@@ -8,6 +8,7 @@ import com.kama.jchatmind.model.response.GetChatMessagesResponse;
 import com.kama.jchatmind.service.ChatMessageFacadeService;
 import lombok.AllArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api")
@@ -24,7 +25,7 @@ public class ChatMessageController {
 
     // 创建聊天消息
     @PostMapping("/chat-messages")
-    public ApiResponse<CreateChatMessageResponse> createChatMessage(@RequestBody CreateChatMessageRequest request) {
+    public ApiResponse<CreateChatMessageResponse> createChatMessage(@Valid @RequestBody CreateChatMessageRequest request) {
         return ApiResponse.success(chatMessageFacadeService.createChatMessage(request));
     }
 

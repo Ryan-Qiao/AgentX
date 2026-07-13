@@ -16,7 +16,7 @@ public class AutoMemoryEventListener {
 
     private final AutoAgentMemoryService autoAgentMemoryService;
 
-    @Async
+    @Async("memoryExecutor")
     @EventListener
     public void handle(AutoMemoryEvent event) {
         try {

@@ -16,6 +16,7 @@ import com.kama.jchatmind.service.AgentMemoryFacadeService;
 import com.kama.jchatmind.service.UserMemoryFacadeService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -197,7 +198,8 @@ class AutoAgentMemoryServiceImplTest {
                 agentMemoryFacadeService,
                 userMemoryFacadeService,
                 mock(ChatClientRegistry.class),
-                new ObjectMapper()
+                new ObjectMapper(),
+                mock(JdbcTemplate.class)
         );
     }
 

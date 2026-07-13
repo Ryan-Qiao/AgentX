@@ -64,6 +64,10 @@ agent-trace:
   max-field-chars: ${AGENT_TRACE_MAX_FIELD_CHARS:20000}
 
 rag:
+  embedding:
+    endpoint: ${RAG_EMBEDDING_ENDPOINT:http://localhost:11434/api/embeddings}
+    model: ${RAG_EMBEDDING_MODEL:bge-m3}
+    timeout-ms: ${RAG_EMBEDDING_TIMEOUT_MS:15000}
   document-converter:
     markitdown-command: ${MARKITDOWN_COMMAND:markitdown}
     timeout-seconds: ${MARKITDOWN_TIMEOUT_SECONDS:60}

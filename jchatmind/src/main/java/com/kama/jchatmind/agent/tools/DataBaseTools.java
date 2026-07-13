@@ -3,6 +3,7 @@ package com.kama.jchatmind.agent.tools;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -17,11 +18,16 @@ import java.util.regex.Pattern;
 public class DataBaseTools implements Tool {
     private static final int MAX_ROWS = 100;
     private static final int QUERY_TIMEOUT_SECONDS = 10;
+    private static final int MAX_CELL_CHARS = 2_000;
     private static final Pattern MUTATING_KEYWORDS = Pattern.compile(
             "\\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|MERGE|GRANT|REVOKE|CALL|COPY|VACUUM|ANALYZE|REFRESH|REINDEX|LOCK)\\b",
             Pattern.CASE_INSENSITIVE
     );
     private static final Pattern COMMENT_PATTERN = Pattern.compile("(--|/\\*|\\*/)");
+    private static final Pattern DANGEROUS_READ_PATTERN = Pattern.compile(
+            "\\b(PG_SLEEP|PG_READ_FILE|PG_READ_BINARY_FILE|PG_LS_DIR|PG_STAT_FILE|LO_IMPORT|LO_EXPORT|DBLINK|CURRENT_SETTING)\\s*\\(|\\b(PG_CATALOG|INFORMATION_SCHEMA)\\.",
+            Pattern.CASE_INSENSITIVE
+    );
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -51,6 +57,7 @@ public class DataBaseTools implements Tool {
      * @return 格式化的查询结果字符串
      */
     @org.springframework.ai.tool.annotation.Tool(name = "databaseQuery", description = "用于在 PostgreSQL 中执行只读查询（SELECT）。接收由模型生成的查询语句，并返回结构化数据结果。该工具仅用于检索数据，严禁任何写入或修改数据库的语句。")
+    @Transactional(readOnly = true, timeout = QUERY_TIMEOUT_SECONDS)
     public String query(String sql) {
         try {
             String validationError = validateReadOnlySql(sql);
@@ -110,6 +117,9 @@ public class DataBaseTools implements Tool {
         if (MUTATING_KEYWORDS.matcher(upperSql).find()) {
             return "错误：SQL 中包含写入或管理类关键字，仅允许只读查询";
         }
+        if (DANGEROUS_READ_PATTERN.matcher(withoutTrailingSemicolon).find()) {
+            return "错误：SQL 包含禁止访问的系统函数或系统目录";
+        }
 
         return null;
     }
@@ -138,6 +148,9 @@ public class DataBaseTools implements Tool {
             for (int i = 1; i <= columnCount; i++) {
                 Object value = rs.getObject(i);
                 String valueStr = value == null ? "NULL" : value.toString();
+                if (valueStr.length() > MAX_CELL_CHARS) {
+                    valueStr = valueStr.substring(0, MAX_CELL_CHARS) + "…[已截断]";
+                }
                 rowData.add(valueStr);
                 int currentWidth = columnWidths.get(i - 1);
                 if (valueStr.length() > currentWidth) {

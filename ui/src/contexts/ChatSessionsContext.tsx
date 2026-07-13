@@ -1,28 +1,13 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   type ChatSessionVO,
+  type UpdateChatSessionRequest,
   getChatSessions,
   deleteChatSession as deleteChatSessionApi,
   deleteChatSessions as deleteChatSessionsApi,
   updateChatSession as updateChatSessionApi,
-  type UpdateChatSessionRequest,
 } from "../api/api.ts";
-
-interface ChatSessionsContextType {
-  chatSessions: ChatSessionVO[];
-  loading: boolean;
-  refreshChatSessions: () => Promise<void>;
-  deleteChatSession: (chatSessionId: string) => Promise<void>;
-  deleteChatSessions: (chatSessionIds: string[]) => Promise<void>;
-  updateChatSession: (
-    chatSessionId: string,
-    request: UpdateChatSessionRequest,
-  ) => Promise<void>;
-}
-
-const ChatSessionsContext = createContext<ChatSessionsContextType | undefined>(
-  undefined
-);
+import { ChatSessionsContext } from "./ChatSessionsContextDefinition.ts";
 
 export function ChatSessionsProvider({ children }: { children: React.ReactNode }) {
   const [chatSessions, setChatSessions] = useState<ChatSessionVO[]>([]);
@@ -39,7 +24,8 @@ export function ChatSessionsProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
-    fetchChatSessions();
+    const timer = window.setTimeout(() => void fetchChatSessions(), 0);
+    return () => window.clearTimeout(timer);
   }, [fetchChatSessions]);
 
   const deleteChatSessionHandle = useCallback(async (chatSessionId: string) => {
@@ -74,14 +60,4 @@ export function ChatSessionsProvider({ children }: { children: React.ReactNode }
       {children}
     </ChatSessionsContext.Provider>
   );
-}
-
-export function useChatSessionsContext() {
-  const context = useContext(ChatSessionsContext);
-  if (context === undefined) {
-    throw new Error(
-      "useChatSessionsContext must be used within a ChatSessionsProvider"
-    );
-  }
-  return context;
 }

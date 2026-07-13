@@ -4,6 +4,7 @@ import com.kama.jchatmind.agent.tools.test.CityTool;
 import com.kama.jchatmind.agent.tools.test.DateTool;
 import com.kama.jchatmind.agent.tools.test.WeatherTool;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 测试工具调用功能（ReAct 模型）
  */
 @SpringBootTest
+@Tag("integration")
 public class JChatMindV2Test {
 
     @Autowired
@@ -158,4 +160,3 @@ public class JChatMindV2Test {
         System.out.println("对话历史长度: " + agent.getConversationHistory().size());
     }
 }
-

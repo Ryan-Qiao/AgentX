@@ -1,32 +1,19 @@
 package com.kama.jchatmind.event.listener;
 
-import com.kama.jchatmind.agent.JChatMind;
-import com.kama.jchatmind.agent.JChatMindFactory;
+import com.kama.jchatmind.agent.AgentRunCoordinator;
 import com.kama.jchatmind.event.ChatEvent;
 import lombok.AllArgsConstructor;
-import org.slf4j.MDC;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 @Component
 @AllArgsConstructor
 public class ChatEventListener {
 
-    private final JChatMindFactory jChatMindFactory;
+    private final AgentRunCoordinator agentRunCoordinator;
 
-    @Async
     @EventListener
     public void handle(ChatEvent event) {
-        MDC.put("traceId", event.getTraceId());
-        MDC.put("agentId", event.getAgentId());
-        MDC.put("sessionId", event.getSessionId());
-        try {
-            JChatMind jChatMind = jChatMindFactory.create(
-                    event.getAgentId(), event.getSessionId(), event.getTraceId(), event.getUserMessageId());
-            jChatMind.run();
-        } finally {
-            MDC.clear();
-        }
+        agentRunCoordinator.submit(event);
     }
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Button, Checkbox, Input, InputNumber, List, Modal, Popconfirm, Select, Slider, Switch, message } from "antd";
 import TextArea from "antd/es/input/TextArea";
 import { DeleteOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
@@ -88,19 +88,19 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
 
   const [createAgentLoading, setCreateAgentLoading] = useState(false);
 
-  const refreshAgentMemories = async () => {
+  const refreshAgentMemories = useCallback(async () => {
     if (!editingAgent?.id) {
       setAgentMemories([]);
       return;
     }
     const resp = await getAgentMemories(editingAgent.id);
     setAgentMemories(resp.agentMemories);
-  };
+  }, [editingAgent?.id]);
 
-  const refreshUserMemories = async () => {
+  const refreshUserMemories = useCallback(async () => {
     const resp = await getUserMemories();
     setUserMemories(resp.userMemories);
-  };
+  }, []);
 
   // 当编辑的 agent 变化时，更新表单数据
   useEffect(() => {
@@ -148,7 +148,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
     } else {
       setAgentMemories([]);
     }
-  }, [open, editingAgent?.id]);
+  }, [open, editingAgent?.id, refreshAgentMemories]);
 
   useEffect(() => {
     if (open) {
@@ -158,7 +158,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
     } else {
       setUserMemories([]);
     }
-  }, [open]);
+  }, [open, refreshUserMemories]);
 
   useEffect(() => {
     const temperatureMax = getTemperatureMax(formData.model);

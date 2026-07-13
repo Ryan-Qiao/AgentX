@@ -20,7 +20,7 @@ export function useAgents() {
   }, []);
 
   useEffect(() => {
-    refreshAgents().then();
+    const initialRefresh = window.setTimeout(() => void refreshAgents(), 0);
 
     const handleAgentsChanged = () => {
       refreshAgents().then();
@@ -28,6 +28,7 @@ export function useAgents() {
 
     window.addEventListener(AGENTS_CHANGED_EVENT, handleAgentsChanged);
     return () => {
+      window.clearTimeout(initialRefresh);
       window.removeEventListener(AGENTS_CHANGED_EVENT, handleAgentsChanged);
     };
   }, [refreshAgents]);

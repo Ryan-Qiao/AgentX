@@ -15,6 +15,7 @@ import {
   type AgentMemoryVO,
   type UserMemoryVO,
 } from "../../api/api.ts";
+import { SERVER_URL } from "../../api/http.ts";
 import { useAgents } from "../../hooks/useAgents.ts";
 import { useChatSessions } from "../../hooks/useChatSessions.ts";
 import EmptyAgentChatView from "./agentChatView/EmptyAgentChatView.tsx";
@@ -428,7 +429,7 @@ const AgentChatView: React.FC = () => {
     }
     const connectedChatSessionId = chatSessionId;
     const es = new EventSource(
-      `http://localhost:8080/sse/connect/${connectedChatSessionId}`,
+      `${SERVER_URL}/sse/connect/${connectedChatSessionId}`,
     );
     es.onmessage = (event) => {
       console.log("Received message:", event.data);

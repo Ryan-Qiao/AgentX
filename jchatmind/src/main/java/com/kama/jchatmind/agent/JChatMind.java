@@ -470,10 +470,7 @@ public class JChatMind {
             }
         }
 
-        if (!StringUtils.hasText(detail)) {
-            return "模型调用失败：后端 Agent 执行过程中发生未知错误，请查看服务日志。";
-        }
-        return "模型调用失败：" + detail;
+        return "模型调用失败：Agent 执行过程中发生错误，请稍后重试；如持续失败，请通过 Trace 查看服务端日志。";
     }
 
     private void notifyRunError(Exception e) {

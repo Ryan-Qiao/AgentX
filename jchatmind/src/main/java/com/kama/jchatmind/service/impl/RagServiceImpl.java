@@ -1,5 +1,6 @@
 package com.kama.jchatmind.service.impl;
 
+import com.kama.jchatmind.exception.BizException;
 import com.kama.jchatmind.mapper.ChunkBgeM3Mapper;
 import com.kama.jchatmind.model.rag.RagSearchResponse;
 import com.kama.jchatmind.model.rag.RagSearchResult;
@@ -12,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.web.reactive.function.client.WebClient;
+import java.time.Duration;
 
 import java.util.List;
 import java.util.Map;
@@ -54,13 +56,22 @@ public class RagServiceImpl implements RagService {
     @Value("${rag.rerank.bge.timeout-ms:15000}")
     private int bgeRerankerTimeoutMs;
 
+    @Value("${rag.embedding.timeout-ms:15000}")
+    private int embeddingTimeoutMs;
+
+    @Value("${rag.embedding.endpoint:http://localhost:11434/api/embeddings}")
+    private String embeddingEndpoint;
+
+    @Value("${rag.embedding.model:bge-m3}")
+    private String embeddingModel;
+
     public RagServiceImpl(
             WebClient.Builder builder,
             ChunkBgeM3Mapper chunkBgeM3Mapper,
             RagRetrievalPolicy ragRetrievalPolicy,
             BgeRerankerClient bgeRerankerClient
     ) {
-        this.webClient = builder.baseUrl("http://localhost:11434").build();
+        this.webClient = builder.build();
         this.chunkBgeM3Mapper = chunkBgeM3Mapper;
         this.ragRetrievalPolicy = ragRetrievalPolicy;
         this.bgeRerankerClient = bgeRerankerClient;
@@ -73,13 +84,15 @@ public class RagServiceImpl implements RagService {
 
     private float[] doEmbed(String text) {
         EmbeddingResponse resp = webClient.post()
-                .uri("/api/embeddings")
+                .uri(embeddingEndpoint)
                 .bodyValue(Map.of(
-                        "model", "bge-m3",
+                        "model", embeddingModel,
                         "prompt", text
                 ))
                 .retrieve()
                 .bodyToMono(EmbeddingResponse.class)
+                .timeout(Duration.ofMillis(embeddingTimeoutMs))
+                .onErrorMap(error -> new BizException("Embedding 服务调用失败，请稍后重试"))
                 .block();
         Assert.notNull(resp, "Embedding response cannot be null");
         return resp.getEmbedding();

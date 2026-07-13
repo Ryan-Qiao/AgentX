@@ -24,6 +24,7 @@ import lombok.AllArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -76,7 +77,21 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
     }
 
     @Override
+    @Transactional
     public CreateChatMessageResponse createChatMessage(CreateChatMessageRequest request) {
+        if (request.getRole() != ChatMessageDTO.RoleType.USER) {
+            throw new BizException("公开消息接口仅允许创建 user 消息");
+        }
+        ChatSession chatSession = chatSessionMapper.selectById(request.getSessionId());
+        if (chatSession == null) {
+            throw new BizException("聊天会话不存在: " + request.getSessionId());
+        }
+        if (!StringUtils.hasText(chatSession.getAgentId())) {
+            throw new BizException("当前聊天会话没有关联 Agent: " + request.getSessionId());
+        }
+        if (StringUtils.hasText(request.getAgentId()) && !request.getAgentId().equals(chatSession.getAgentId())) {
+            throw new BizException("请求中的 Agent 与聊天会话不匹配");
+        }
         String traceId = UUID.randomUUID().toString();
         ChatMessageDTO.MetaData metadata = request.getMetadata() == null
                 ? ChatMessageDTO.MetaData.builder().build()
@@ -84,13 +99,6 @@ public class ChatMessageFacadeServiceImpl implements ChatMessageFacadeService {
         metadata.setTraceId(traceId);
         request.setMetadata(metadata);
         ChatMessage chatMessage = doCreateChatMessage(request);
-        ChatSession chatSession = chatSessionMapper.selectById(chatMessage.getSessionId());
-        if (chatSession == null) {
-            throw new BizException("聊天会话不存在: " + chatMessage.getSessionId());
-        }
-        if (!StringUtils.hasText(chatSession.getAgentId())) {
-            throw new BizException("当前聊天会话没有关联 Agent: " + chatMessage.getSessionId());
-        }
         // 发布聊天通知事件
         publisher.publishEvent(new ChatEvent(
                         traceId,

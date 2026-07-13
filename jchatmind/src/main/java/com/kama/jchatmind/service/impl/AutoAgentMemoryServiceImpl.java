@@ -26,6 +26,8 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
@@ -64,9 +66,20 @@ public class AutoAgentMemoryServiceImpl implements AutoAgentMemoryService {
     private final UserMemoryFacadeService userMemoryFacadeService;
     private final ChatClientRegistry chatClientRegistry;
     private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
+    @Transactional
     public void consolidate(String agentId, String sessionId) {
+        Boolean acquired = jdbcTemplate.queryForObject(
+                "SELECT pg_try_advisory_xact_lock(hashtext(?))",
+                Boolean.class,
+                "agent-memory:" + agentId + ":" + sessionId
+        );
+        if (!Boolean.TRUE.equals(acquired)) {
+            log.debug("自动记忆任务已在处理中，跳过重复任务: agentId={}, sessionId={}", agentId, sessionId);
+            return;
+        }
         Agent agent = agentMapper.selectById(agentId);
         if (agent == null || !Boolean.TRUE.equals(agent.getAutoMemoryEnabled())) {
             return;
